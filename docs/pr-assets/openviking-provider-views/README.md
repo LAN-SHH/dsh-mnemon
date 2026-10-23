@@ -68,7 +68,8 @@ The 17 other tools in the last run are dsh-mnemon's `mnemon_*` tools, the same a
 
 ## Tests
 
-- `plugins/dsh-mnemon-source-memory-spaces`: 30 files, 315 tests, including `provider-views.spec.ts` (declared views only, bounds, named integration fields, the read-only profile) and `provider-views-page.spec.tsx` (Browse, the plugin card, and a write policy set only by the press).
+- Root: 234 files, 2,849 tests; `MNEMON_CLI_PATH=/nonexistent/mnemon pnpm run verify:plugins`: 18 plugin repositories and 19 packed artifacts; `verify:package` and `verify-docs` pass.
+- `plugins/dsh-mnemon-source-memory-spaces`: 30 files, 323 tests, including `provider-views.spec.ts` (declared views only, bounds, named integration fields, the read-only profile) and `provider-views-page.spec.tsx` (Browse, the plugin card, and a write policy set only by the press).
 - `plugins/dsh-mnemon-provider-openviking`: 93 tests, including `views.spec.ts` (roots, traversal refused, image and text previews, server changes) and `official-plugin.spec.ts` (read only, namespace match, status unchanged without the plugin).
 
 The lab scripts and the recorded requests stay outside the repository.

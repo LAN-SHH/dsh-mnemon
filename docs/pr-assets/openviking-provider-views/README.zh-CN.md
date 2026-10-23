@@ -68,7 +68,8 @@
 
 ## 测试
 
-- `plugins/dsh-mnemon-source-memory-spaces`：30 个文件、315 项测试，其中 `provider-views.spec.ts` 覆盖只读取声明的视图、大小限制、集成状态只保留具名字段，以及只读的 profile；`provider-views-page.spec.tsx` 覆盖浏览、插件卡片，以及只有按下按钮才会设置写入策略。
+- 根目录：234 个文件、2,849 项测试；`MNEMON_CLI_PATH=/nonexistent/mnemon pnpm run verify:plugins`：18 个插件仓库与 19 个打包产物；`verify:package` 与 `verify-docs` 均通过。
+- `plugins/dsh-mnemon-source-memory-spaces`：30 个文件、323 项测试，其中 `provider-views.spec.ts` 覆盖只读取声明的视图、大小限制、集成状态只保留具名字段，以及只读的 profile；`provider-views-page.spec.tsx` 覆盖浏览、插件卡片，以及只有按下按钮才会设置写入策略。
 - `plugins/dsh-mnemon-provider-openviking`：93 项测试，其中 `views.spec.ts` 覆盖起点、拒绝路径穿越、图片与文本预览和服务端改动；`official-plugin.spec.ts` 覆盖只读、命名空间比对，以及没有插件时状态不变。
 
 实验脚本与记录下的请求保留在仓库之外。

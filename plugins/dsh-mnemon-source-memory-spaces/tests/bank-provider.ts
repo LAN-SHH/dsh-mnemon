@@ -21,6 +21,8 @@ export function bankProvider(banks: Record<string, Row[]>) {
         packageName: 'dsh-mnemon-provider-bank-test', version: '1.0.0', label: bankDescriptor.label, summary: bankDescriptor.summary,
         origin: 'third-party', locality: 'remote', workspaceBinding: 'provider-global', fields, secrets: [], scoreSemantics: 'normalized-relevance', capabilities },
       create: () => ({ id: 'bank', scoreSemantics: NORMALIZED_RELEVANCE_SCORE,
+        // Writes land in one bank (#434).
+        namespaceKey: connection => [String(connection.bankId ?? 'dsh')],
         discover: async () => Object.keys(banks).map(bank => ({ externalId: bank, name: bank, description: `The ${bank} bank`, connection: { bankId: bank } })),
         status: async () => ({ healthy: true }),
         list: async body => [...(banks[bankOf(body)] ?? [])],

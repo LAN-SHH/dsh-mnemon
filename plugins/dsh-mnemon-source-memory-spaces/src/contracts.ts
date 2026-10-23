@@ -482,6 +482,8 @@ export interface MemorySpaceCatalog {
   writeScope?: MemorySpaceWriteScope
   /** Provider namespaces asked for again in this process: whether a pass is running, and the last one. Older Sources omit it. */
   rediscovery?: { running: boolean; last?: MemorySpaceRediscovery }
+  /** Why every space is read only: the write-policy file cannot be read (#434). Present only then. */
+  writePolicyProblem?: string
 }
 
 /** What one Provider answered when its namespaces were asked for again. */

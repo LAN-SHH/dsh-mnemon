@@ -15,13 +15,25 @@ Provider 使用 `provider-lab/` 中的 Hindsight（官方 GHCR standalone 镜像
 
 ## 改动
 
-- **明确的选择。** 空间的**编辑**对话框中新增**写入**：**可写入**（“DSH 可以在这里存入、遗忘和链接记忆。”）或**只读**（“照常召回；DSH 不再在这里存入、遗忘、链接或归档记忆。”）。只读空间的卡片上会显示**只读**。同一个选择也是 Source 管理操作 `body-write-policy`，参数为 `{ memoryBodyId, policy: 'writable' | 'read-only' }`，与所有管理变更一样需要确认。页面客户端通过 `setWritePolicy` 调用它，Agent 工具无法调用它。
-- **在调用 Provider 之前拒绝。** 记忆空间服务在写入真正发出时读取磁盘上的设置，而不是在组成 View 时读取。检查覆盖存入、批量写入中的每个目标与每一条、遗忘、链接、合并进空间、删除 Mnemon Native Store 与补齐向量。Agent、页面、任务 Agent 与 Host 的每条写入路径最终都经过这里。被拒绝的写入会写明是哪个空间，且不会调用 Provider。
-- **按命名空间，而不是按卡片。** 只读条目按 externalId 标识命名空间，或按标识命名空间的设置（已填入默认值）标识；Mnemon Native Store 按其 id 标识。因此，为同一个 bank 手动创建的空间、重新连接、重新发现、打开开关，以及通配读取，都同样只读。设置改为指向另一个命名空间的空间，采用那个命名空间的设置。
-- **不退回。** 未指定空间的写入进入唯一一个已激活且可写的空间；一个都没有或不止一个时，会要求指明空间。Source 的 facts 不再为只读空间提供链接与遗忘，`archivableCount` 也不计入它们。交给 Host 写入方的写入范围不包含它们，任务 Agent 的目标检查拒绝它们，工具守卫让写入方不碰它们；“存入记忆”也不列出它们。所有空间都只读时，运行时记忆容量维护与文档归档改走本地归档。
-- **模型看到的内容。** 模型查看的空间目录中，只读空间标为 `writePolicy: 'read-only'`，其 `remember`、`link`、`forget` 显示为 `false`。
-- **保存位置。** 设置保存在 `state/memory-provider-write-policy.json`，与 Provider 连接放在一起。单独存一个文件，是因为旧版本会重写空间注册表，并丢掉它们不认识的字段。只有存在只读空间时才有这个文件。文件无法读取时，所有空间都按只读处理，直到修复或删除该文件；召回照常。
-- **没有设置的空间不受影响。** 不写文件，不加字段，revision 编码不变；没有设置的空间，报错与以前相同。
+- **明确的选择。** 空间的**编辑**对话框中新增**写入**，位于它所作用的 Provider 设置下方：**可写入**（“DSH 照常写入这里。”）或**只读**（“照常召回；DSH 不再写入这里，也不写入同一命名空间的其他空间。”）。只读空间的卡片上会显示**只读**。只改动这一选择时，只保存这一选择；与其他设置一起改动时，如果设置已保存而选择没能保存，页面会明确说明。同一个选择也是 Source 管理操作 `body-write-policy`，参数为 `{ memoryBodyId, policy: 'writable' | 'read-only' }`，与所有管理变更一样需要确认。页面客户端通过 `setWritePolicy` 调用它，Agent 工具无法调用它。
+- **在调用 Provider 之前拒绝。** 记忆空间服务在写入真正发出时读取磁盘上的设置，而不是在组成 View 时读取。检查覆盖存入、批量写入中的每个目标与每一条、遗忘、链接、合并进空间、删除 Mnemon Native Store 与补齐向量；合并在导入前、补齐在每一步前都会再检查一次。Agent、页面、任务 Agent 与 Host 的每条写入路径最终都经过这里。被拒绝的写入会写明是哪个空间，且不会调用 Provider。
+- **按写入的落点，而不是按卡片。** 每个空间都有一个键：Provider 类型，再加上 Provider 指明的写入落点，运行时的默认值都已解析。内置 Provider 通过新增的可选适配器方法 `namespaceKey` 给出：
+  - Hindsight：地址与 bank；
+  - Mem0：地址、user 与 agent，通配符按 `dsh-user` 与 `dsh` 写入；
+  - Honcho：地址、workspace 与两个 peer；
+  - RetainDB：地址、project 与 user；
+  - Supermemory：地址与 container tag；
+  - OpenViking：地址、account 与记忆根。actor peer 只是请求头，不计入；
+  - Holographic：解析后的存储文件；
+  - ByteRover：解析后的目录；
+  - Mnemon Native：它的 Store。
+
+  没有该方法的 Provider 只按服务地址确定键，从而失败即封闭。两个键中一个是另一个的前缀时，视为同一落点，因此只有服务器才知道归属用户的 OpenViking 记忆根，会覆盖其 account 下的所有记忆根。手动创建的空间、持久化策略新建的空间、同一服务器上的第二个 Provider 实例、重新连接、重新发现以及打开开关，都不会带来写入。
+- **可写入只作用于该空间自己的落点。** 它只移除这一个键，不会经由通配符或旧的 externalId 移除别的键。如果某个空间也写入另一个只读空间的落点，它仍保持只读，并说明原因。
+- **不退回。** 未指定空间的写入进入唯一一个已激活且可写的空间；一个都没有或不止一个时，会要求指明空间。Source 的 facts 不再为只读空间提供链接与遗忘，`archivableCount` 也不计入它们。交给 Host 写入方的写入范围不包含它们，任务 Agent 的目标检查拒绝它们，工具守卫让写入方不碰它们。无论在对话中还是记忆空间页面上，“存入记忆”都不列出它们。所有空间都只读时，运行时记忆容量维护与文档归档改走本地归档。
+- **模型与页面看到的内容。** 模型查看的空间目录中，只读空间标为 `writePolicy: 'read-only'`，其 `remember`、`link`、`forget` 显示为 `false`。召回证据与页面条目也给出同样的能力，因此不会在这些记忆上提供“遗忘”。
+- **保存位置。** 设置按数据目录、按记忆空间 Source 实例保存在 `state/memory-provider-write-policy.json`，与 Provider 连接放在一起。单独存一个文件，是因为旧版本会重写空间注册表，并丢掉它们不认识的字段。最多可以有 1,000 个只读落点；超出时会拒绝设为只读，而不是丢弃最早的。文件或其中的条目无法读取时，所有空间都按只读处理，召回照常：此时目录中带有 `writePolicyProblem`，未指定空间的写入会说明原因，页面显示横幅，并在确认后提供**重置写入选择**。
+- **没有设置的空间不受影响。** 不写文件，不加字段，revision 编码不变，报错与以前相同。Mnemon Native 的召回仍会在 Store 中记录读取，这一点在所有空间都一样。
 
 ## 真实 Hindsight 上的结果
 
@@ -45,6 +57,8 @@ main 与分支对同样的两个 bank 运行同一个场景。先运行分支，
 | `wp434-dsh` 中的记忆，前 → 后 | 4 → 5 | 2 → 4 |
 
 在分支上，DSH bank 返回的每个回执都是 `queued`，完成状态为 `accepted`，不会是 `committed`。Hindsight 在后台完成提取，只读设置不改变这类回执的含义。分支运行前，`wp434-dsh` 已有两条记忆。它们来自同一分支场景更早的一次运行；那次运行的召回发生在 Hindsight 存好写入之前，因此没有记录。
+
+这个真实场景已作为 `plugins/dsh-mnemon-source-memory-spaces/tests/hindsight-write-policy.live.spec.ts` 提交。它需要通过 `MNEMON_WRITE_POLICY_HINDSIGHT` 显式开启，计数代理在测试内部运行。上面的记录基于 `e55da9e4`。按评审意见修复后，在 `3cd04d74` 上重新运行了一次：指向旧 bank 的四次写入都被拒绝，Hindsight 没有收到任何请求；写入 DSH bank 的两次各发出一个 `POST /memories`，完成状态为 `accepted`；召回两个 bank 都能读到。`wp434-legacy` 前后都是 4 条记忆，`wp434-dsh` 从 5 条变为 7 条。
 
 ## WebUI 中的表现
 
@@ -85,12 +99,13 @@ main 与分支对同样的两个 bank 运行同一个场景。先运行分支，
 
 ## 测试
 
-- `plugins/dsh-mnemon-source-memory-spaces/tests/write-policy.spec.ts` 用一个统计写入次数的 bank Provider 驱动真实的 Source。每条写入路径各有一项测试：View 的存入、遗忘与链接，以及管理操作的存入、批量写入、遗忘与链接。其余测试覆盖以下情形：显式指定旧空间（未激活时与重新打开后）；为同一 bank 手动创建的空间；设置改为指向该 bank 的空间；断开后重新挂载；View 组成后更改设置；默认目标；不退回；facts 与写入范围。在 Mnemon Native 上，测试覆盖以下情形：存入、批量写入、遗忘、链接、合并、补齐向量与删除都不运行任何修改 Store 的命令；批量写入在目标变为只读时停下；设置文件无法读取或格式不支持；重启以及另一个数据目录；没有设置时行为不变。
-- `write-policy-page.spec.tsx` 在真实 Source 上渲染真实页面，覆盖选择、卡片标记、改回可写入，以及页面自身的“存入记忆”对话框不提供只读空间。
+- `plugins/dsh-mnemon-source-memory-spaces/tests/write-policy.spec.ts` 用一个统计写入次数的 bank Provider 驱动真实的 Source。每条写入路径各有一项测试：View 的存入、遗忘与链接，以及管理操作的存入、批量写入、遗忘与链接。其余测试覆盖以下情形：显式指定旧空间（未激活时与重新打开后）；为同一 bank 手动创建的空间；设置改为指向该 bank 的空间；断开后重新挂载；View 组成后更改设置；默认目标；不退回；facts 与写入范围；召回证据与页面条目给出只读空间当前的能力。评审指出的情形各有测试：带通配符的 Mem0 user 与 agent、同一存储上手动或由持久化策略创建的 Holographic 空间、空白与相对的 ByteRover 目录、OpenViking 的 peer、末尾斜杠与只有服务器才知道归属用户的记忆根、改指向另一个 bank 的 Hindsight 空间、同一服务器上的第二个 Provider 实例，以及 1,000 个落点的上限。在 Mnemon Native 上，测试覆盖以下情形：存入、批量写入、遗忘、链接、合并、补齐向量与删除都不运行任何写入记忆或向量的命令；合并目标与补齐在中途变为只读；批量写入在目标变为只读时停下；设置文件无法读取、格式不支持或含有无法读取的条目，目录与未指定空间的写入都会说明原因，并可重置；重启以及另一个数据目录；没有设置时行为不变。
+- `write-policy-page.spec.tsx` 在真实 Source 上渲染真实页面，覆盖选择、只改动选择时只保存选择、卡片标记、改回可写入、页面自身的“存入记忆”对话框不提供只读空间，以及设置文件无法读取时的横幅与确认后的重置。
+- `hindsight-write-policy.live.spec.ts` 就是上文的真实场景，需要通过 `MNEMON_WRITE_POLICY_HINDSIGHT` 显式开启。
 - 其余由根目录测试覆盖。层组合矩阵新增只读空间：覆盖经 Agent 工具、网页与 Host 自身路径的 MEMORY.md 归档与文档归档，以及 View 提供的内容。任务 Agent 的目标检查与工具守卫也有测试；“存入记忆”的去处列表不含只读空间；只读 Native 空间不提供**补齐**。
 
 ```text
-pnpm --filter dsh-mnemon-source-memory-spaces exec vitest run   # 307 通过，2 跳过
+pnpm --filter dsh-mnemon-source-memory-spaces exec vitest run   # 315 通过，3 跳过
 pnpm exec vitest run --dir tests                                # 2,176 通过，7 跳过
 pnpm run typecheck && pnpm --filter dsh-mnemon-source-memory-spaces run typecheck
 pnpm --filter dsh-mnemon-source-memory-spaces run build && pnpm run build

@@ -10,9 +10,10 @@ import { createRunner } from '../src/runner.ts'
 import { resolveMemorySpacesConfig } from '../src/config.ts'
 import { MemoryProviderCatalog } from '../src/providers/catalog.ts'
 import type { ProcessRunner } from '../src/providers/process.ts'
+import type { MnemonRunner } from '../src/runner.ts'
 import { modelSpaceCatalog } from '../src/view-model.ts'
 import type { MemorySpace, MemorySpaceCatalog } from '../src/contracts.ts'
-import { createRegistry, createService, installedCliStub } from './providers.ts'
+import { createRegistry, createService, descriptors, installedCliStub } from './providers.ts'
 import { strategy } from './fixture.ts'
 import { bankDescriptor, bankProvider, type Row } from './bank-provider.ts'
 
@@ -140,7 +141,7 @@ describe('Memory Space write policy (#434)', () => {
       expect(offers).not.toContain('link')
       expect(offers).not.toContain('forget')
       const remember = turn.view.actionOffers.find(action => action.sourceActionId === 'remember')!.id
-      await expect(turn.executeAction(remember, { content: 'x' }, () => true)).rejects.toThrow('remember requires a writable Memory Space: the ones in this View scope are read only')
+      await expect(turn.executeAction(remember, { content: 'x' }, () => true)).rejects.toThrow(/^remember requires a writable Memory Space: the ones in this View scope are read only; name a writable one$/u)
       await expect(f.client.mutate('remember', { content: 'x' }, { confirmed: true })).rejects.toThrow(`no active memory space takes writes: legacy (${f.legacy}), fresh (${f.fresh}) are read only`)
       // The model sees what each space takes now.
       const inspected = await turn.executeRoute(turn.view.routes.find(item => item.sourceRouteId === 'inspect')!.id, { section: 'directory' })
@@ -155,6 +156,20 @@ describe('Memory Space write policy (#434)', () => {
       const directory = (await f.client.read('body-directory', { writeScope: { viewId: scoped.view.id, grant } } as never)).value as unknown as MemorySpaceCatalog
       expect(directory.writeScope?.memoryBodyIds).toEqual([])
       scoped.release()
+    } finally { await f.dispose() }
+  })
+
+  it('reports what a read-only space takes in recall evidence and page items, so no Forget is offered there', async () => {
+    const f = await mountBanks()
+    try {
+      await f.policy(f.legacy, 'read-only')
+      const turn = await f.runner.beginTurn({ scope: f.scope })
+      const recalled = await turn.executeRoute(turn.view.routes.find(item => item.sourceRouteId === 'recall')!.id, { query: 'legacy' })
+      const taken = (item: { provenance?: unknown }) => (item.provenance as { memoryCapabilities?: Record<string, unknown> }).memoryCapabilities
+      expect(recalled.items.map(item => [taken(item)?.remember, taken(item)?.forget, taken(item)?.link])).toEqual([[false, false, false], [false, false, false]])
+      turn.release()
+      const listed = (await f.client.read('list', { memoryBodyIds: [f.legacy] } as never)).value as unknown as { items: Array<{ memoryCapabilities?: Record<string, unknown> }> }
+      expect(listed.items.map(item => item.memoryCapabilities?.forget)).toEqual([false, false])
     } finally { await f.dispose() }
   })
 
@@ -202,7 +217,7 @@ function nativeFixture(dataDir = temporary('mnemon-write-policy-native-')) {
 }
 
 describe('Memory Space write policy over Mnemon Native (#434)', () => {
-  it('runs no command that changes a read-only Store, and reads it as before', async () => {
+  it('runs no command that writes memories or vectors to a read-only Store, and recalls it as before', async () => {
     const f = nativeFixture()
     f.service.updateSpace('legacy', { active: true })
     const before = f.service.memoryRevision()
@@ -217,7 +232,7 @@ describe('Memory Space write policy over Mnemon Native (#434)', () => {
     await expect(f.service.embedMissing('legacy')).rejects.toThrow('so no vectors were filled in. Make it writable first to fill them in.')
     await expect(f.service.deleteSpace('legacy')).rejects.toThrow('so its Mnemon Store was not deleted. Make it writable first to delete it.')
     expect(f.writeCommands()).toEqual([])
-    // Reads are as before.
+    // Recall is as before; a Mnemon Native recall still records its reads in the Store, as everywhere.
     await expect(f.service.search({ query: 'legacy', memoryBodyIds: ['legacy'] })).resolves.toMatchObject({ results: [expect.objectContaining({ id: 'm1' })] })
     expect((await f.service.embeddingStatus()).spaces).toEqual(expect.arrayContaining([expect.objectContaining({ memoryBodyId: 'legacy', writePolicy: 'read-only' })]))
     // The one writable active space is the default destination.
@@ -240,6 +255,31 @@ describe('Memory Space write policy over Mnemon Native (#434)', () => {
     expect(written).toEqual(['work'])
   })
 
+  it('checks a merge target again before its import, and a vector fill before each step', async () => {
+    const f = nativeFixture()
+    f.service.updateSpace('legacy', { active: true })
+    const native = (f.service as unknown as { providers: Map<string, { list: unknown; graph: unknown }> }).providers.get('mnemon-native')!
+    native.list = async () => {
+      // Another request makes the target read only while the merge reads its sources.
+      f.service.setWritePolicy('work', 'read-only')
+      return [{ id: 'l1', content: 'Legacy memory' }]
+    }
+    native.graph = async () => ({ nodes: [], edges: [], generatedAt: new Date().toISOString() })
+    await expect(f.service.mergeSpaces('work', ['legacy'])).rejects.toThrow('(work) is read only')
+    f.service.setWritePolicy('work', 'writable')
+    const runner = (f.service as unknown as { runner: { runText: (...args: unknown[]) => Promise<string>; runJson: (...args: unknown[]) => Promise<unknown> } }).runner
+    const runText = runner.runText.bind(runner)
+    let steps = 0
+    runner.runText = async (...args: unknown[]) => {
+      // The space turns read only during the first step, which fills one vector.
+      if ((args[0] as string[]).includes('--all')) { steps += 1; f.service.setWritePolicy('work', 'read-only') }
+      return runText(...args)
+    }
+    runner.runJson = async () => ({ embedding_available: true, model: 'fixture', total_insights: 10, embedded: steps, coverage: `${steps * 10}%` })
+    await expect(f.service.embedMissing('work')).rejects.toThrow('so no more vectors were filled in')
+    expect(f.writeCommands().map(args => args.includes('import') ? 'import' : args.includes('--all') ? 'embed' : args.join(' '))).toEqual(['embed'])
+  })
+
   it('makes every space read only while the policy file cannot be read, and recalls as before', async () => {
     const f = nativeFixture()
     const path = join(f.dataDir, 'state', 'memory-provider-write-policy.json')
@@ -248,13 +288,23 @@ describe('Memory Space write policy over Mnemon Native (#434)', () => {
     f.service.memorySpaces.reload()
     expect(f.service.spaceDirectory().items.map(space => space.writePolicy)).toEqual(['read-only', 'read-only'])
     await expect(f.service.remember({ content: 'x', memoryBodyId: 'work' })).rejects.toThrow(`Memory Space write policy ${path} is unreadable`)
-    await expect(f.service.remember({ content: 'x', memoryBodyId: 'work' })).rejects.toThrow('fix or remove it. Until then')
-    expect(() => f.service.setWritePolicy('work', 'writable')).toThrow('fix or remove it')
+    await expect(f.service.remember({ content: 'x', memoryBodyId: 'work' })).rejects.toThrow('fix it, or reset the write choices. Until then')
+    expect(() => f.service.setWritePolicy('work', 'writable')).toThrow('fix it, or reset the write choices')
     await expect(f.service.search({ query: 'legacy', memoryBodyIds: ['work'] })).resolves.toMatchObject({ results: [expect.objectContaining({ id: 'm1' })] })
     writeFileSync(path, JSON.stringify({ version: 2, readOnly: {} }))
     f.service.memorySpaces.reload()
-    await expect(f.service.remember({ content: 'x', memoryBodyId: 'work' })).rejects.toThrow('has an unsupported format; fix or remove it')
+    await expect(f.service.remember({ content: 'x', memoryBodyId: 'work' })).rejects.toThrow('has an unsupported format; fix it, or reset the write choices')
     expect(f.writeCommands()).toEqual([])
+    // The directory says why, a write naming no space says so too, and a confirmed reset recovers.
+    expect(f.service.spaceDirectory().writePolicyProblem).toContain(path)
+    await expect(f.service.remember({ content: 'x' })).rejects.toThrow('has an unsupported format; fix it, or reset the write choices. Until then no Memory Space takes writes')
+    expect(f.service.resetWritePolicy()).not.toHaveProperty('writePolicyProblem')
+    expect(existsSync(path)).toBe(false)
+    expect(f.service.spaceDirectory().items.every(space => space.writePolicy === undefined)).toBe(true)
+    // A file with an entry it cannot read is not read at all: no namespace silently turns writable.
+    writeFileSync(path, JSON.stringify({ version: 1, readOnly: [['mnemon-native', 'legacy'], ['mnemon-native']] }))
+    f.service.memorySpaces.reload()
+    expect(f.service.spaceDirectory().items.map(space => space.writePolicy)).toEqual(['read-only', 'read-only'])
     rmSync(path)
     f.service.memorySpaces.reload()
     expect(f.service.spaceDirectory().items.every(space => space.writePolicy === undefined)).toBe(true)
@@ -264,7 +314,7 @@ describe('Memory Space write policy over Mnemon Native (#434)', () => {
     const f = nativeFixture()
     f.service.setWritePolicy('legacy', 'read-only')
     const path = join(f.dataDir, 'state', 'memory-provider-write-policy.json')
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ version: 1, readOnly: { 'mnemon-native': [{ spaceId: 'legacy' }] } })
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ version: 1, readOnly: [['mnemon-native', 'legacy']] })
     const restarted = createService(f.runner, f.config, createRegistry(f.runner, true))
     expect(restarted.memorySpaces.get('legacy').writePolicy).toBe('read-only')
     // The registry the space settings live in carries no policy, for readers that rewrite it.
@@ -289,24 +339,123 @@ describe('Memory Space write policy over Mnemon Native (#434)', () => {
   })
 })
 
-describe('Memory Space write policy registry (#434)', () => {
-  it('names a namespace by its settings with defaults, a wildcard read included', async () => {
-    const dataDir = temporary('mnemon-write-policy-registry-')
-    const runner = createRunner(resolveMemorySpacesConfig({ dataDir, cliPath: '/missing/mnemon' }))
-    const registry = new MemorySpaceRegistry(runner, true, undefined, new MemoryProviderCatalog([bankDescriptor]))
-    registry.syncProviderService('bank', {}, [
-      { externalId: 'dsh', name: 'Default bank', description: 'Has the default bank id', connection: {} },
-      { externalId: 'team', name: 'Team bank', description: 'Another bank', connection: { bankId: 'team' } },
+/** Memory Spaces with every built-in Provider's adapter and no Mnemon CLI, as the Source runs them. */
+function providerService(dataDir = temporary('mnemon-write-policy-where-'), catalog?: MemoryProviderCatalog) {
+  const runner: MnemonRunner = {
+    command: '/missing/mnemon', commandFound: false,
+    runJson: vi.fn(async () => ({})), runText: vi.fn(async () => ''), runTextBatch: vi.fn(async () => []),
+    effectiveDataDir: () => dataDir, persistedStore: () => 'default', effectiveStore: () => 'default',
+  }
+  const config = resolveMemorySpacesConfig({ dataDir, cliPath: '/missing/mnemon' })
+  const service = createService(runner, config, catalog === undefined ? undefined : createRegistry(runner, true, undefined, catalog), undefined, undefined, catalog)
+  return { service, registry: service.memorySpaces, dataDir }
+}
+const policies = (registry: MemorySpaceRegistry) => Object.fromEntries(registry.list().map(space => [space.name, space.writePolicy ?? 'writable']))
+
+describe('Memory Space write policy follows where writes land (#434)', () => {
+  it('keys Mem0 by the user and agent a write is sent as, a wildcard writing as the default', () => {
+    const { registry } = providerService()
+    registry.syncProviderService('mem0', { endpoint: 'https://mem0.example', mode: 'platform' }, [
+      { externalId: 'user:alice', name: 'alice', description: 'A legacy user', connection: { userId: 'alice', agentId: '*', rerank: false } },
+      { externalId: 'agent:bot', name: 'bot', description: 'An agent', connection: { userId: '*', agentId: 'bot', rerank: false } },
     ])
-    const [defaults, team] = ['Default bank', 'Team bank'].map(name => registry.list().find(space => space.name === name)!)
-    registry.setWritePolicy(defaults!.id, 'read-only')
-    expect(registry.get(defaults!.id).writePolicy).toBe('read-only')
-    expect(registry.get(team!.id)).not.toHaveProperty('writePolicy')
-    // A space created for the default bank by naming it, or reading every bank, is read only too.
-    const named = await registry.create({ name: 'Default by name', description: 'Names the default bank', providerId: 'bank', connection: { bankId: 'dsh' } })
-    const every = await registry.create({ name: 'Every bank', description: 'Reads every bank', providerId: 'bank', connection: { bankId: '*' } })
-    expect(registry.list().filter(space => space.writePolicy === 'read-only').map(space => space.id).sort()).toEqual([defaults!.id, named.id, every.id].sort())
-    expect(() => registry.setWritePolicy(defaults!.id, 'unknown' as never)).toThrow('unsupported write policy')
+    const id = (name: string) => registry.list().find(space => space.name === name)!.id
+    registry.setWritePolicy(id('alice'), 'read-only')
+    // bot writes as dsh-user/bot, not into alice's memories.
+    expect(policies(registry)).toEqual({ alice: 'read-only', bot: 'writable' })
+    registry.setWritePolicy(id('bot'), 'writable')
+    expect(policies(registry)).toEqual({ alice: 'read-only', bot: 'writable' })
+  })
+
+  it('keeps every Holographic space on a read-only store read only, the strategy\'s new spaces included', async () => {
+    const { service, dataDir } = providerService()
+    await service.updateProviderService('holographic', {})
+    const legacy = service.spaceDirectory().items.find(space => space.provider.id === 'holographic')!
+    await service.remember({ content: 'Legacy fact written before the policy.', memoryBodyId: legacy.id })
+    service.setWritePolicy(legacy.id, 'read-only')
+    const store = join(dataDir, 'state', 'holographic', 'store.json')
+    const facts = () => (JSON.parse(readFileSync(store, 'utf8')) as { facts: unknown[] }).facts.length
+    const before = facts()
+    const byHand = await service.createSpace({ name: 'Another', description: 'Made by hand', providerId: 'holographic', active: true })
+    const automatic = await service.createSpaceForPersistence({ name: 'Automatic', description: 'Made by the writer' }, undefined)
+    expect([byHand.writePolicy, automatic.provider.id, automatic.writePolicy]).toEqual(['read-only', 'holographic', 'read-only'])
+    await expect(service.remember({ content: 'x', memoryBodyId: byHand.id })).rejects.toThrow('is read only')
+    await expect(service.remember({ content: 'x', memoryBodyId: automatic.id })).rejects.toThrow('is read only')
+    expect(facts()).toBe(before)
+  })
+
+  it('resolves a blank or relative ByteRover folder as each run does', async () => {
+    const { registry, dataDir } = providerService()
+    const folder = join(dataDir, 'state', 'byterover', 'default')
+    registry.syncProviderService('byterover', {}, [{ externalId: folder, name: 'legacy', description: 'The default folder', connection: { workingDirectory: folder } }])
+    registry.setWritePolicy(registry.list()[0]!.id, 'read-only')
+    await registry.create({ name: 'blank', description: 'No folder set', providerId: 'byterover' })
+    await registry.create({ name: 'relative', description: 'The same folder, relative', providerId: 'byterover', connection: { workingDirectory: 'state/byterover/default' } })
+    await registry.create({ name: 'elsewhere', description: 'Another folder', providerId: 'byterover', connection: { workingDirectory: 'state/byterover/other' } })
+    expect(policies(registry)).toEqual({ legacy: 'read-only', blank: 'read-only', relative: 'read-only', elsewhere: 'writable' })
+  })
+
+  it('keys OpenViking by account and memory root, not the actor peer, and an unresolved owner covers the account', async () => {
+    const { registry } = providerService()
+    registry.syncProviderService('openviking', { endpoint: 'https://ov.example', account: 'acme' }, [
+      { externalId: 'acme:alice', name: 'legacy', description: 'A legacy root', connection: { targetUri: 'viking://user/alice/memories', user: 'alice', actorPeerId: 'dsh' } },
+    ])
+    registry.setWritePolicy(registry.list()[0]!.id, 'read-only')
+    const create = (name: string, connection: Record<string, string>) => registry.create({ name, description: name, providerId: 'openviking', connection })
+    await create('peer', { targetUri: 'viking://user/alice/memories', user: 'alice', actorPeerId: 'other' })
+    await create('slash', { targetUri: 'viking://user/alice/memories/', user: 'alice', actorPeerId: 'dsh' })
+    await create('no-user', { targetUri: 'viking://user/alice/memories' })
+    await create('shorthand', { targetUri: 'viking://user/memories' })
+    await create('bob', { targetUri: 'viking://user/bob/memories', user: 'bob' })
+    expect(policies(registry)).toEqual({ legacy: 'read-only', peer: 'read-only', slash: 'read-only', 'no-user': 'read-only', shorthand: 'read-only', bob: 'writable' })
+    // Writable applies to the space's own place; one whose owner only the server knows says why it stays read only.
+    const id = (name: string) => registry.list().find(space => space.name === name)!.id
+    expect(() => registry.setWritePolicy(id('shorthand'), 'writable')).toThrow('Memory Space shorthand stays read only: another read-only space writes to the same place. Make that one writable.')
+    registry.setWritePolicy(id('peer'), 'writable')
+    expect(policies(registry)).toEqual({ legacy: 'writable', peer: 'writable', slash: 'writable', 'no-user': 'writable', shorthand: 'writable', bob: 'writable' })
+  })
+
+  it('follows a space to the bank it now writes to, and Writable keeps the legacy bank read only', async () => {
+    const { registry } = providerService()
+    registry.syncProviderService('hindsight', { endpoint: 'http://127.0.0.1:1/' }, [{ externalId: 'legacy', name: 'legacy', description: 'A legacy bank', connection: { bankId: 'legacy' } }])
+    const legacy = registry.list()[0]!
+    registry.setWritePolicy(legacy.id, 'read-only')
+    // The Edit dialog: the bank changed to a new one, Writes set to Writable.
+    expect(registry.update(legacy.id, { connection: { bankId: 'dsh-new' } }).writePolicy).toBeUndefined()
+    registry.setWritePolicy(legacy.id, 'writable')
+    const byHand = await registry.create({ name: 'legacy again', description: 'The legacy bank', providerId: 'hindsight', connection: { bankId: 'legacy' } })
+    expect(byHand.writePolicy).toBe('read-only')
+    // Writable on any space of that bank makes the bank writable for all of them.
+    const other = await registry.create({ name: 'third', description: 'The legacy bank too', providerId: 'hindsight', connection: { bankId: 'legacy' } })
+    registry.setWritePolicy(byHand.id, 'writable')
+    expect(registry.get(other.id).writePolicy).toBeUndefined()
+  })
+
+  it('keys a Provider by its type and service, so a second instance on the same server is the same place', () => {
+    const hindsight = descriptors.find(descriptor => descriptor.id === 'hindsight')!
+    const catalog = new MemoryProviderCatalog([hindsight, { ...hindsight, id: 'hindsight-team', typeId: 'hindsight' }])
+    const { registry } = providerService(undefined, catalog)
+    registry.syncProviderService('hindsight', { endpoint: 'http://127.0.0.1:1' }, [{ externalId: 'legacy', name: 'first', description: 'A bank', connection: { bankId: 'legacy' } }])
+    registry.syncProviderService('hindsight-team', { endpoint: 'http://127.0.0.1:1/' }, [
+      { externalId: 'legacy', name: 'second', description: 'The same bank', connection: { bankId: 'legacy' } },
+      { externalId: 'other', name: 'third', description: 'Another bank', connection: { bankId: 'other' } },
+    ])
+    registry.setWritePolicy(registry.list().find(space => space.name === 'first')!.id, 'read-only')
+    // Without its own adapter the second instance is keyed by its service: every bank there is covered.
+    expect(policies(registry)).toEqual({ first: 'read-only', second: 'read-only', third: 'read-only' })
+    registry.useNamespaceKeys((_providerId, connection) => [String(connection.endpoint).replace(/\/+$/u, ''), String(connection.bankId)])
+    expect(policies(registry)).toEqual({ first: 'read-only', second: 'read-only', third: 'writable' })
+  })
+
+  it('refuses more read-only places than it keeps, rather than dropping the oldest', () => {
+    const { registry } = providerService(undefined, new MemoryProviderCatalog([bankDescriptor]))
+    registry.useNamespaceKeys((_providerId, connection) => [String(connection.bankId)])
+    registry.syncProviderService('bank', {}, Array.from({ length: 1001 }, (_, index) => ({ externalId: `b${index}`, name: `b${index}`, description: 'A bank', connection: { bankId: `b${index}` } })))
+    const spaces = registry.list()
+    for (const space of spaces.slice(0, 1000)) registry.setWritePolicy(space.id, 'read-only')
+    expect(() => registry.setWritePolicy(spaces[1000]!.id, 'read-only')).toThrow('At most 1000 places can be read only; make one writable first')
+    expect(registry.list().filter(space => space.writePolicy === 'read-only')).toHaveLength(1000)
+    expect(() => registry.setWritePolicy(spaces[0]!.id, 'unknown' as never)).toThrow('unsupported write policy')
     expect(() => registry.setWritePolicy('missing', 'read-only')).toThrow('unknown memory space: missing')
   })
 })

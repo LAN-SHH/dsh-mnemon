@@ -282,7 +282,8 @@ async function manageMemorySpaces(service: MemorySpacesService, request: MemoryS
       const parsed = updateSpaceRequest(request.input)
       return managementResult(service, service.updateSpace(parsed.memoryBodyId, parsed.request))
     }
-    // A person's choice on the Memory Spaces page; no Agent tool reaches it (#434).
+    // A person's choices on the Memory Spaces page; no Agent tool reaches them (#434).
+    case 'body-write-policy-reset': return managementResult(service, service.resetWritePolicy())
     case 'body-write-policy': {
       const policy = text(input.policy, 'policy', 20)
       if (policy !== 'writable' && policy !== 'read-only') throw new Error(`unsupported write policy: ${String(policy)}`)
@@ -658,7 +659,7 @@ export function createMemorySpacesSource(providerSnapshot: MemorySpaceProviderSn
             const defaults = candidates.filter(id => service.takesWrites(id))
             if (defaults.length !== 1) {
               throw new Error(defaults.length === 0 && candidates.length > 0
-                ? 'remember requires a writable Memory Space: the ones in this View scope are read only; name a writable one, or create one'
+                ? 'remember requires a writable Memory Space: the ones in this View scope are read only; name a writable one'
                 : 'remember requires an explicit Memory Space in this View scope')
             }
             bodyId = defaults[0]!

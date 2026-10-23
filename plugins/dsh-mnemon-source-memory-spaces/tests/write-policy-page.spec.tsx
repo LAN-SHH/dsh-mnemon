@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -41,7 +41,11 @@ describe('Read only on the Memory Spaces page (#434)', () => {
       } }, { instanceId: 'spaces' })
       const management = await runner.managementClient('source:spaces')
       await management.mutate('provider-service-update', { providerId: 'bank', settings: {}, enabled: true }, { confirmed: true })
-      render(<MemorySpacesSourcePage page="spaces" sourceTypeId="memory-spaces" sourceInstanceKey="source:spaces" sourceInstances={[]} locale="en" writable management={management} />)
+      const mutate = management.mutate.bind(management)
+      const operations: string[] = []
+      management.mutate = (operation, ...rest) => { operations.push(operation); return mutate(operation, ...rest) }
+      const page = (refreshKey = 0) => <MemorySpacesSourcePage page="spaces" sourceTypeId="memory-spaces" sourceInstanceKey="source:spaces" sourceInstances={[]} locale="en" writable management={management} refreshKey={refreshKey} />
+      const view = render(page())
       fireEvent.click(await screen.findByRole('button', { name: en['overview.editSpaceAria'].replace('{name}', 'legacy') }))
       const dialog = screen.getByRole('dialog', { name: en['overview.editSpaceAria'].replace('{name}', 'legacy') })
       const group = within(dialog).getByRole('group', { name: en['overview.writePolicy'] })
@@ -51,6 +55,8 @@ describe('Read only on the Memory Spaces page (#434)', () => {
       fireEvent.click(within(group).getByRole('radio', { name: new RegExp(`^${en['common.readOnlySpace']}`, 'u') }))
       fireEvent.click(within(dialog).getByRole('button', { name: en['overview.saveSpace'] }))
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      // Only the write choice changed, so only it is saved.
+      expect(operations).toEqual(['body-write-policy'])
       const card = (await screen.findByRole('button', { name: en['overview.editSpaceAria'].replace('{name}', 'legacy') })).closest('article')!
       expect(within(card).getByText(en['common.readOnlySpace'])).not.toBeNull()
       const items = ((await management.read('body-directory')).value as unknown as MemorySpaceCatalog).items
@@ -73,6 +79,15 @@ describe('Read only on the Memory Spaces page (#434)', () => {
       fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['overview.saveSpace'] }))
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       await waitFor(() => expect(screen.queryByText(en['common.readOnlySpace'])).toBeNull())
+      // A policy file that cannot be read is said on the page, with a confirmed way back.
+      writeFileSync(join(directory, 'state', 'memory-provider-write-policy.json'), '{ not json')
+      view.rerender(page(1))
+      const reset = await screen.findByRole('button', { name: en['overview.writePolicyReset'] })
+      expect(screen.getByText(new RegExp(en['overview.writePolicyProblem'].split(':')[0]!, 'u'))).not.toBeNull()
+      fireEvent.click(reset)
+      fireEvent.click(await screen.findByRole('button', { name: en['overview.writePolicyResetConfirm'] }))
+      await waitFor(() => expect(screen.queryByRole('button', { name: en['overview.writePolicyResetConfirm'] })).toBeNull())
+      expect(existsSync(join(directory, 'state', 'memory-provider-write-policy.json'))).toBe(false)
     } finally { cleanup(); await runner.dispose(); rmSync(directory, { recursive: true, force: true }) }
   }, 15_000)
 })

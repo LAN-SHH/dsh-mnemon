@@ -1,5 +1,10 @@
 {
   "record": "retaindb-memory-type",
+  "fixes": [
+    "memory types (8817e539)",
+    "legacy writes and receipts (4f337fc0)",
+    "reading types back (60922fd7)"
+  ],
   "date": "2026-10-24",
   "baseline": "claude/fix-retaindb-importance-scale c841066f (#462)",
   "environment": {
@@ -37,7 +42,7 @@
     },
     "/v1/memories": "factual for every category and for none",
     "reason": "factual is the type RetainDB Server and RetainDB Local fall back to, and what the Provider already sent without a category",
-    "readBack": "unchanged"
+    "readBack": "see readBack"
   },
   "serverReplay": {
     "script": "../retaindb-importance-scale/server-schema.probe.mjs",
@@ -656,17 +661,125 @@
       ]
     }
   },
+  "legacyWrites": {
+    "cause": {
+      "schema": "https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/routes.ts#L2594: async z.boolean().optional().default(true)",
+      "queue": "https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/routes.ts#L2606-L2638: unless async is false, the write is queued and answered 202 with { success: true, mode: \"async\", jobId, status: \"PROCESSING\", statusUrl }",
+      "receipt": "the Provider never sent async and still answered action \"stored\", \"RetainDB stored the memory synchronously.\"",
+      "currentEndpoint": "https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/memory.ts#L1027-L1033: write_mode \"sync\", which the Provider sends, stores before answering"
+    },
+    "fix": {
+      "legacyBody": "async: false, declared by the legacy schema",
+      "queuedAnswer": "mode \"async\" or a job id (jobId on the legacy endpoint, job_id on /v1/memory) gives { action: \"queued\", jobId }; the Source counts \"queued\" as accepted, not committed (mutationResultCompletion, PENDING_MUTATION_STATES)",
+      "storedId": "id, then memory_id (RetainDB Server /v1/memory), then memory.id (RetainDB Server legacy); before, only id, which only RetainDB Local sends"
+    },
+    "replay": {
+      "#462": {
+        "counts": {
+          "/v1/memory": {
+            "accepted": 6,
+            "refused": 12,
+            "storedBeforeAnswer": 6,
+            "queued": 0
+          },
+          "/v1/memories": {
+            "accepted": 0,
+            "refused": 18,
+            "storedBeforeAnswer": 0,
+            "queued": 0
+          }
+        },
+        "legacyPaths": [
+          "refused"
+        ],
+        "currentPaths": [
+          "stored",
+          "refused"
+        ]
+      },
+      "this PR, types only (b406e30c)": {
+        "counts": {
+          "/v1/memory": {
+            "accepted": 18,
+            "refused": 0,
+            "storedBeforeAnswer": 18,
+            "queued": 0
+          },
+          "/v1/memories": {
+            "accepted": 18,
+            "refused": 0,
+            "storedBeforeAnswer": 0,
+            "queued": 18
+          }
+        },
+        "legacyPaths": [
+          "queued"
+        ],
+        "currentPaths": [
+          "stored"
+        ]
+      },
+      "this PR": {
+        "counts": {
+          "/v1/memory": {
+            "accepted": 18,
+            "refused": 0,
+            "storedBeforeAnswer": 18,
+            "queued": 0
+          },
+          "/v1/memories": {
+            "accepted": 18,
+            "refused": 0,
+            "storedBeforeAnswer": 18,
+            "queued": 0
+          }
+        },
+        "legacyPaths": [
+          "stored"
+        ],
+        "currentPaths": [
+          "stored"
+        ]
+      }
+    }
+  },
+  "readBack": {
+    "cause": "categories were memory_type passed through (factual, workflow, ...), and RetainDB Local search results carry the type as type (https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/local/src/cli.ts#L916-L933), so recall read every memory as general",
+    "fix": "type = memory_type ?? type ?? category; preference and decision map back to those categories, any other type reads as general",
+    "examples": {
+      "list item, memory_type decision": {
+        "before": "decision",
+        "now": "decision"
+      },
+      "list item, memory_type factual": {
+        "before": "factual",
+        "now": "general"
+      },
+      "RetainDB Local search result, type preference": {
+        "before": "general",
+        "now": "preference"
+      },
+      "RetainDB Local search result, type workflow": {
+        "before": "general",
+        "now": "general"
+      }
+    }
+  },
   "unitTests": {
     "retaindb": {
-      "before": "6 failed, 17 passed (the new tests against #462's driver.ts)",
-      "after": "23 passed",
+      "before": "10 failed, 17 passed (the new tests against #462's driver.ts)",
+      "after": "27 passed",
       "failingBefore": [
         "sends category preference as preference, and as factual to the legacy endpoint",
         "sends category decision as decision, and as factual to the legacy endpoint",
         "sends category fact as factual, and as factual to the legacy endpoint",
         "sends category insight as factual, and as factual to the legacy endpoint",
         "sends category context as factual, and as factual to the legacy endpoint",
-        "sends category general as factual, and as factual to the legacy endpoint"
+        "sends category general as factual, and as factual to the legacy endpoint",
+        "asks the legacy endpoint to store the memory before it answers",
+        "reports a write the server queued anyway as queued, not stored",
+        "names the memory RetainDB Server stored, whichever endpoint answered",
+        "reads preference and decision back from either type key, and any other type as general"
       ],
       "passingBefore": {
         "sends factual on both endpoints when the request carries no category": "the Provider already sent factual without a category"
@@ -679,7 +792,5 @@
     "dsh-mnemon-source-memory-spaces tests": "296 passed, 2 skipped",
     "node scripts/verify-docs.mjs": "pass"
   },
-  "notChanged": {
-    "legacyAsync": "the legacy endpoint queues a write unless the body sets async: false, which the Provider does not send"
-  }
+  "liveDriver": "the live runs used the driver at b406e30c, before the receipt and read-back fixes; neither changes what RetainDB Local stores: its answers carry id and no job, and the Provider never falls back to the legacy endpoint there"
 }

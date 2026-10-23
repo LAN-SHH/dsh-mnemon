@@ -1,13 +1,18 @@
-# RetainDB memory types RetainDB Server accepts
+# RetainDB memory types, legacy writes and read-back
 
 [简体中文](./README.zh-CN.md) | [Verification record](./verification.json)
 
 This record is stacked on #462, which maps importance onto RetainDB's 0-1 scale
-([its record](../retaindb-importance-scale/README.md)).
+([its record](../retaindb-importance-scale/README.md)). It covers three fixes to how the RetainDB Provider writes
+and reads memories:
 
-The RetainDB Provider sent the Memory Spaces category as RetainDB's `memory_type`
-(`memory_type: request.category ?? 'factual'`). The Source always sends a category: `general` by default, and
-`context` for Runtime and document archives (`src/host/runtime-capacity.ts`, `src/host/document-archive.ts`).
+1. **Memory types.** The Provider sent the Memory Spaces category as RetainDB's `memory_type`
+   (`memory_type: request.category ?? 'factual'`). The Source always sends a category: `general` by default, and
+   `context` for Runtime and document archives (`src/host/runtime-capacity.ts`, `src/host/document-archive.ts`).
+2. **[Legacy writes and receipts](#legacy-writes-and-receipts).** The legacy endpoint queued every write while the
+   Provider's receipt said it was stored.
+3. **[Reading types back](#reading-types-back).** Categories read back as RetainDB's own type, or as `general` from
+   RetainDB Local's search.
 
 Baseline: `claude/fix-retaindb-importance-scale` at `c841066f` (#462). The runs took place on 2026-10-24
 (Asia/Shanghai) on macOS arm64 with Node 24.19.0 and pnpm 10.13.1. All memories are synthetic.
@@ -15,9 +20,9 @@ Baseline: `claude/fix-retaindb-importance-scale` at `c841066f` (#462). The runs 
 The evidence:
 
 - RetainDB's own source at `2ad2cc4d`;
-- unit tests of the type the Provider sends to each endpoint;
+- unit tests of the type the Provider sends to each endpoint, of its receipts, and of the categories it reads back;
 - a replay of the exact bodies against RetainDB Server's own request schema;
-- a live run against RetainDB Local 0.2.2 from the provider lab, before and after the fix.
+- a live run against RetainDB Local 0.2.2 from the provider lab, before and after the type fix.
 
 No RetainDB Server and no hosted service was run. Cloud was not observed.
 
@@ -63,7 +68,7 @@ With #462, `POST /v1/memory` still refused 12 of 18 category and importance comb
 - A request without a category is still sent as `factual` on both endpoints.
 - `factual` is the type RetainDB Server and RetainDB Local fall back to themselves, and the type the Provider already
   sent when no category reached it.
-- Reading back is unchanged.
+- Reading back maps `preference` and `decision` back to those categories; see [Reading types back](#reading-types-back).
 
 ## Against RetainDB Server's schema
 
@@ -112,6 +117,59 @@ RetainDB Local infers a type from, so it falls back to the type it was sent.
 The stored type and importance are the same in both runs for all 18 memories. Only the type RetainDB Local records
 as sent, `metadata.original_type`, changed.
 
+## Legacy writes and receipts
+
+**Cause.** The legacy `POST /v1/memories` declares `async: z.boolean().optional().default(true)`
+([`api/routes.ts:2594`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/routes.ts#L2594)).
+Unless the body sets it to false, the Server queues the write and answers 202 with `mode: "async"` and a `jobId`
+([`:2606-2638`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/routes.ts#L2606-L2638)).
+The Provider never set it, yet its receipt said "RetainDB stored the memory synchronously." `POST /v1/memory` was
+not affected: the Provider sends it `write_mode: "sync"`, and it stores before it answers
+([`api/memory.ts:1027-1033`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/memory.ts#L1027-L1033)).
+
+**Fix.**
+
+- The legacy body now carries `async: false`, which its schema declares, so the Server stores the memory before it
+  answers.
+- A server that queues the write anyway answers with `mode: "async"` and a job id (`jobId` on the legacy endpoint,
+  `job_id` on `/v1/memory`). The receipt is then `action: "queued"` with that id. The Memory Spaces Source counts a
+  queued receipt as accepted, not committed (`mutationResultCompletion` in
+  `plugins/dsh-mnemon-source-memory-spaces/src/service.ts`), as it does for Hindsight's and Supermemory's queued
+  writes.
+- A stored receipt now names the memory on RetainDB Server too. Its synchronous answers carry the id as `memory_id`
+  on `/v1/memory`, and only inside `memory` on the legacy endpoint, where the Provider read `id` alone, which only
+  RetainDB Local sends.
+
+**Replay.** The schema replay now copies both endpoints' `async` fields and reports how the Server would write each
+accepted body:
+
+| Legacy `POST /v1/memories` | #462 | This PR, types only | This PR |
+|---|---|---|---|
+| Bodies accepted | 0 of 18 | 18 of 18 | 18 of 18 |
+| Stored before the answer | 0 | 0 (all 18 queued) | 18 |
+
+`POST /v1/memory` stores all 18 accepted bodies before it answers, as before.
+
+## Reading types back
+
+**Cause.** The Provider read a memory's category from `memory_type` and passed RetainDB's type through, so a listed
+memory read back as `factual` or `workflow`, which are not Memory Spaces categories. RetainDB Local's search results
+carry the type as `type` beside the stored `memory`
+([`local/src/cli.ts:916-933`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/local/src/cli.ts#L916-L933)),
+so every recalled memory read back as `general`.
+
+**Fix.** The type is read from `memory_type`, then `type`, then `category` as before. `preference` and `decision`
+map back to those categories, and any other type reads as `general`.
+
+| RetainDB returns | Category before | Category now |
+|---|---|---|
+| List item, `memory_type: "decision"` | `decision` | `decision` |
+| List item, `memory_type: "factual"` | `factual` | `general` |
+| RetainDB Local search result, `type: "preference"` | `general` | `preference` |
+| RetainDB Local search result, `type: "workflow"` | `general` | `general` |
+
+The test builds its search results in RetainDB Local's own shape.
+
 ## Reproduce
 
 The after columns come from this branch after `pnpm build && pnpm -r build`. For the before columns, build the
@@ -129,21 +187,28 @@ pnpm --filter dsh-mnemon-provider-retaindb run build
 Then run the same probes for the fix, with `rv462-type-after` for the live run.
 
 ```text
-pnpm --filter dsh-mnemon-provider-retaindb exec vitest run     # 23 passed; on #462's driver, 6 of the 7 new tests fail
+pnpm --filter dsh-mnemon-provider-retaindb exec vitest run     # 27 passed; on #462's driver, 10 of the 11 new tests fail
 pnpm --filter dsh-mnemon-provider-retaindb run typecheck
 pnpm --filter dsh-mnemon-provider-retaindb run build
 pnpm --filter dsh-mnemon-source-memory-spaces exec vitest run  # 296 passed, 2 skipped
 node scripts/verify-docs.mjs
 ```
 
-The new unit tests check the type sent to each endpoint for every category, and for a request without one. On #462's
-driver, the test without a category passes, because the Provider already sent `factual` then. The other six fail.
+The new unit tests check:
+
+- the type sent to each endpoint for every category, and for a request without one;
+- the legacy body's `async: false`;
+- a queued answer on either endpoint, reported as queued;
+- the ids RetainDB Server's synchronous answers carry;
+- the categories read back from RetainDB Local-shaped search results and from lists.
+
+On #462's driver, only the test without a category passes, because the Provider already sent `factual` then.
 
 ## Limits
 
 - No RetainDB Server and no hosted service was run. The Server's verdicts come from its own schema, parsed as the
   Server parses it. Cloud was not observed.
-- The legacy endpoint queues a write unless the body sets `async: false`, which the Provider does not send. That is
-  unchanged here.
+- The live runs used the driver before the receipt and read-back fixes. Neither changes what RetainDB Local stores:
+  its answers carry `id` and no job, and the Provider never falls back to the legacy endpoint there.
 - The live runs' two projects and 36 memories remain in the lab's store; the lab's `dsh-lab` project kept its six
   memories.

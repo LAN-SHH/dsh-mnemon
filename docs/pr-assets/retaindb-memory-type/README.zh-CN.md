@@ -1,19 +1,21 @@
-# RetainDB Server 接受的记忆类型
+# RetainDB 的记忆类型、旧接口写入与读回
 
 [English](./README.md) | [验证记录](./verification.json)
 
-本记录基于 #462，后者把重要度映射到 RetainDB 的 0-1 量纲（[其记录](../retaindb-importance-scale/README.zh-CN.md)）。
+本记录基于 #462，后者把重要度映射到 RetainDB 的 0-1 量纲（[其记录](../retaindb-importance-scale/README.zh-CN.md)）。它涵盖 RetainDB Provider 写入与读取记忆的三处修复：
 
-RetainDB Provider 把 Memory Spaces 的分类当作 RetainDB 的 `memory_type` 发送（`memory_type: request.category ?? 'factual'`）。Source 总会给出分类：默认为 `general`，运行时记忆与项目档案的归档使用 `context`（`src/host/runtime-capacity.ts`、`src/host/document-archive.ts`）。
+1. **记忆类型。** Provider 把 Memory Spaces 的分类当作 RetainDB 的 `memory_type` 发送（`memory_type: request.category ?? 'factual'`）。Source 总会给出分类：默认为 `general`，运行时记忆与项目档案的归档使用 `context`（`src/host/runtime-capacity.ts`、`src/host/document-archive.ts`）。
+2. **[旧接口写入与回执](#旧接口写入与回执)。** 旧接口把每次写入都排入队列，Provider 的回执却说已经存下。
+3. **[读回类型](#读回类型)。** 分类读回时是 RetainDB 自己的类型，从 RetainDB Local 检索得到的则一律是 `general`。
 
 基线为 `claude/fix-retaindb-importance-scale` 的 `c841066f`（#462）。验证于 2026-10-24（Asia/Shanghai）进行，环境为 macOS arm64、Node 24.19.0 与 pnpm 10.13.1。记忆均为合成数据。
 
 证据包括：
 
 - RetainDB 自身在 `2ad2cc4d` 的源码；
-- Provider 向每个接口发送的类型的单元测试；
+- 单元测试：Provider 向每个接口发送的类型、它的回执，以及它读回的分类；
 - 用 RetainDB Server 自己的请求 schema 重放实际请求体；
-- 修复前后对 provider lab 中 RetainDB Local 0.2.2 的实际运行。
+- 类型修复前后对 provider lab 中 RetainDB Local 0.2.2 的实际运行。
 
 没有运行 RetainDB Server，也没有使用托管服务。Cloud 没有实际观察到。
 
@@ -44,7 +46,7 @@ Provider 直接发送分类本身。在 RetainDB Server 上：
 - 旧接口 `POST /v1/memories` 不接受 `preference` 与 `decision`，所有分类都按 `factual` 发送给它。
 - 没有分类的请求在两个接口上仍按 `factual` 发送。
 - `factual` 是 RetainDB Server 与 RetainDB Local 自己的回退类型，也是没有分类到达时 Provider 原本就发送的类型。
-- 读回不变。
+- 读回时 `preference` 与 `decision` 映射回对应分类，见[读回类型](#读回类型)。
 
 ## 用 RetainDB Server 的 schema 重放
 
@@ -83,6 +85,40 @@ Provider 直接发送分类本身。在 RetainDB Server 上：
 
 两次运行中，18 条记忆存下的类型与重要度完全相同，只有 RetainDB Local 记录的发送类型 `metadata.original_type` 变了。
 
+## 旧接口写入与回执
+
+**原因。** 旧接口 `POST /v1/memories` 声明 `async: z.boolean().optional().default(true)`（[`api/routes.ts:2594`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/routes.ts#L2594)）。只要请求体没有把它设为 false，Server 就会把写入排入队列，并以 202 返回 `mode: "async"` 与一个 `jobId`（[`:2606-2638`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/routes.ts#L2606-L2638)）。Provider 从未设置这个字段，回执却写着“RetainDB stored the memory synchronously.”。`POST /v1/memory` 不受影响：Provider 发给它的是 `write_mode: "sync"`，它会先存下再应答（[`api/memory.ts:1027-1033`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/server/src/api/memory.ts#L1027-L1033)）。
+
+**修复。**
+
+- 旧接口的请求体现在带上 `async: false`（其 schema 声明了这个字段），Server 会先存下记忆再应答。
+- 仍把写入排入队列的服务器会返回 `mode: "async"` 与任务 id（旧接口为 `jobId`，`/v1/memory` 为 `job_id`）。此时回执为 `action: "queued"` 并带上该 id。Memory Spaces Source 把排队的回执算作已接受、未提交（`plugins/dsh-mnemon-source-memory-spaces/src/service.ts` 中的 `mutationResultCompletion`），与 Hindsight、Supermemory 排队写入的处理相同。
+- 在 RetainDB Server 上，已存下的回执现在也带上记忆的 id。它的同步应答在 `/v1/memory` 上把 id 放在 `memory_id`，在旧接口上只放在 `memory` 中；而 Provider 以前只读 `id`，只有 RetainDB Local 会发送这个字段。
+
+**重放。** schema 重放现在复制了两个接口的 `async` 字段，并报告 Server 会如何写入每个被接受的请求体：
+
+| 旧接口 `POST /v1/memories` | #462 | 本 PR，仅类型修复 | 本 PR |
+|---|---|---|---|
+| 被接受的请求体 | 18 中 0 | 18 中 18 | 18 中 18 |
+| 应答前已存下 | 0 | 0（18 条全部排队） | 18 |
+
+`POST /v1/memory` 与以前一样，在应答前存下全部 18 个被接受的请求体。
+
+## 读回类型
+
+**原因。** Provider 从 `memory_type` 读取记忆的分类，并把 RetainDB 的类型原样当作分类，所以列表中的记忆读回为 `factual` 或 `workflow`，而它们都不是 Memory Spaces 的分类。RetainDB Local 的检索结果把类型放在 `type` 中，与存下的 `memory` 并列（[`local/src/cli.ts:916-933`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/local/src/cli.ts#L916-L933)），所以每条召回的记忆都读回为 `general`。
+
+**修复。** 类型依次从 `memory_type`、`type` 读取，再像以前一样读 `category`。`preference` 与 `decision` 映射回对应分类，其他类型一律读作 `general`。
+
+| RetainDB 返回 | 以前的分类 | 现在的分类 |
+|---|---|---|
+| 列表项，`memory_type: "decision"` | `decision` | `decision` |
+| 列表项，`memory_type: "factual"` | `factual` | `general` |
+| RetainDB Local 检索结果，`type: "preference"` | `general` | `preference` |
+| RetainDB Local 检索结果，`type: "workflow"` | `general` | `general` |
+
+测试按 RetainDB Local 自己的结构构造检索结果。
+
 ## 复现
 
 修复后的列来自本分支，先运行 `pnpm build && pnpm -r build`。修复前的列需要先用 #462 的驱动构建 Provider，结束后再恢复：
@@ -99,17 +135,25 @@ pnpm --filter dsh-mnemon-provider-retaindb run build
 然后对修复运行同样的探针，实际运行使用 `rv462-type-after`。
 
 ```text
-pnpm --filter dsh-mnemon-provider-retaindb exec vitest run     # 23 通过；用 #462 的驱动时，7 项新测试中有 6 项失败
+pnpm --filter dsh-mnemon-provider-retaindb exec vitest run     # 27 通过；用 #462 的驱动时，11 项新测试中有 10 项失败
 pnpm --filter dsh-mnemon-provider-retaindb run typecheck
 pnpm --filter dsh-mnemon-provider-retaindb run build
 pnpm --filter dsh-mnemon-source-memory-spaces exec vitest run  # 296 通过，2 跳过
 node scripts/verify-docs.mjs
 ```
 
-新的单元测试检查每个分类、以及没有分类的请求发往每个接口的类型。用 #462 的驱动时，没有分类的那项测试也通过，因为 Provider 那时本就发送 `factual`；其余六项失败。
+新的单元测试检查：
+
+- 每个分类、以及没有分类的请求发往每个接口的类型；
+- 旧接口请求体中的 `async: false`；
+- 任一接口排队的应答被报告为排队；
+- RetainDB Server 同步应答中的 id；
+- 从 RetainDB Local 结构的检索结果与列表中读回的分类。
+
+用 #462 的驱动时，只有没有分类的那项测试通过，因为 Provider 那时本就发送 `factual`。
 
 ## 限制
 
 - 没有运行 RetainDB Server，也没有使用托管服务。Server 的结论来自它自己的 schema，解析方式与 Server 相同。Cloud 没有实际观察到。
-- 旧接口在请求体没有设置 `async: false` 时会把写入排入队列，而 Provider 不发送这个字段。这一点本 PR 没有改变。
+- 实际运行使用的是回执与读回修复之前的驱动。这两处修复都不改变 RetainDB Local 存下的内容：它的应答带有 `id` 而没有任务，Provider 在它上面也从不回退到旧接口。
 - 两次实际运行写入的两个项目与 36 条记忆仍留在 lab 的存储中；lab 自己的 `dsh-lab` 项目保留其六条记忆。

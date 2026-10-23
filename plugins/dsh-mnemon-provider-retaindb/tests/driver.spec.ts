@@ -119,7 +119,8 @@ describe('standalone retaindb data plane', () => {
 
   describe('importance on RetainDB\'s 0..1 scale', () => {
     // The Memory Spaces Source sends every Provider an integer importance from 1 to 5, and 3 when the
-    // writer gives none. RetainDB takes an importance from 0 to 1, with 0.7 as its default.
+    // writer gives none. RetainDB takes 0..1: Server refuses more than 1 and defaults to 0.5, Local
+    // defaults to 0.62. The Provider maps 1..5 onto 0.5..0.9, the band RetainDB's own writers use.
     async function remember(importance: number | undefined, { currentMissing = false } = {}) {
       const sent: Array<{ path: string; json: Record<string, unknown> }> = []
       const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
@@ -143,14 +144,19 @@ describe('standalone retaindb data plane', () => {
       } }])
     })
 
-    it('sends RetainDB\'s default 0.7 when the request carries no importance', async () => {
+    it('sends 0.7, the middle of the band, when the request carries no importance', async () => {
       const { sent } = await remember(undefined)
       expect(sent.map(request => request.json.importance)).toEqual([0.7])
     })
 
-    it('keeps an importance outside 1..5 within 0..1', async () => {
-      expect((await remember(9)).sent.map(request => request.json.importance)).toEqual([1])
-      expect((await remember(-9)).sent.map(request => request.json.importance)).toEqual([0])
+    it('rounds the importance to a whole step and clamps it to 1..5, as the Holographic Provider does', async () => {
+      const sentFor = async (importance: number) => (await remember(importance)).sent.map(request => request.json.importance)
+      expect([await sentFor(9), await sentFor(-9), await sentFor(2.4), await sentFor(3.6)]).toEqual([[0.9], [0.5], [0.6], [0.8]])
+    })
+
+    it('treats an importance that is not a finite number as none', async () => {
+      const sentFor = async (importance: number) => (await remember(importance)).sent.map(request => request.json.importance)
+      expect([await sentFor(Number.NaN), await sentFor(Number.POSITIVE_INFINITY), await sentFor(Number.NEGATIVE_INFINITY)]).toEqual([[0.7], [0.7], [0.7]])
     })
 
     it('sends the same importance to the legacy endpoint', async () => {

@@ -34,24 +34,34 @@ function isEndpointMissing(error: unknown): boolean {
   return error instanceof Error && /HTTP 404\b/u.test(error.message)
 }
 
-/** RetainDB's own importance default, on its 0..1 scale. */
-const RETAINDB_DEFAULT_IMPORTANCE = 0.7
+/**
+ * The importance sent for the Source's default 3: the middle of the 0.5..0.9 band
+ * RetainDB's own writers use. Its SDK's extraction keeps importance within 0.5..1,
+ * falling back to 0.7, and RetainDB Local writes 0.55 to 0.92.
+ */
+const IMPORTANCE_AT_DEFAULT = 0.7
 
-/** How far one step of the Source's 1..5 importance moves RetainDB's importance. */
+/** How far one step of the Source's 1..5 importance moves the importance sent. */
 const IMPORTANCE_PER_STEP = 0.1
 
+/** The 1..5 importance a request carries, if any, read as the Holographic Provider reads it. */
+function importanceLevel(value: unknown): number | undefined {
+  const level = Number(value)
+  return value === undefined || value === null || !Number.isFinite(level) ? undefined : Math.min(5, Math.max(1, Math.round(level)))
+}
+
 /**
- * The importance RetainDB takes, from 0 to 1 with a default of 0.7, for the
- * integer 1..5 the Memory Spaces Source sends (3 when the writer gives none).
- * Importance 3 maps to RetainDB's default and each step above or below moves it
- * by 0.1, within 0..1, so 1..5 become 0.5..0.9. A request without an importance
- * gets the default. The 1..5 value used to be sent as is, outside that scale.
+ * The importance sent to RetainDB, which takes 0..1. RetainDB Server refuses a
+ * value above 1 with HTTP 400 and defaults to 0.5; RetainDB Local defaults to 0.62.
+ * The Source's integer 1..5 (3 when the writer gives none) maps onto 0.5..0.9:
+ * 3 is sent as 0.7, and each step above or below moves it by 0.1. A request
+ * without a usable importance is sent as 0.7. The 1..5 value used to be sent as is.
  */
-function retainDbImportance(importance: number | undefined): number {
-  const steps = importance === undefined ? 0 : importance - 3
-  const mapped = Math.min(1, Math.max(0, RETAINDB_DEFAULT_IMPORTANCE + steps * IMPORTANCE_PER_STEP))
+function retainDbImportance(importance: unknown): number {
+  const level = importanceLevel(importance)
+  const steps = level === undefined ? 0 : level - 3
   // Two decimals, so 1 is sent as 0.5 rather than 0.49999999999999994.
-  return Math.round(mapped * 100) / 100
+  return Math.round((IMPORTANCE_AT_DEFAULT + steps * IMPORTANCE_PER_STEP) * 100) / 100
 }
 
 export class RetainDbProvider extends HttpMemoryProvider implements MemoryProviderAdapter {

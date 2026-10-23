@@ -67,7 +67,8 @@ describe('Provider views and a vendor plugin on the Memory Spaces page', () => {
       fireEvent.click(within(dialog).getByRole('tab', { name: 'Log' }))
       fireEvent.click(await within(dialog).findByRole('button', { expanded: false }))
       expect(within(dialog).getByText('Prefers English.')).not.toBeNull()
-      fireEvent.click(within(dialog).getAllByRole('button', { name: en['common.close'] })[0]!)
+      // The dialog's own close control, which dsh-mnemon labels.
+      fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close' })[0]!)
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
       // The one action, pressed: the space becomes read only and the suggestion goes.

@@ -78,7 +78,7 @@ export function officialPluginIntegration(snapshot: OfficialPluginSnapshot, spac
     state: 'active',
     ...(snapshot.skipSubagentSessions === false ? { notes: [{
       id: 'captures-task-agents', tone: 'caution',
-      text: 'It also captures the sessions of task Agents, dsh-mnemon\'s included, unless skipSubagentSessions is set.',
+      text: 'It also captures the sessions of task Agents, dsh-mnemon\'s included.',
       textI18nKey: 'providerViews.openviking.capturesTaskAgents',
     }] } : {}),
   }

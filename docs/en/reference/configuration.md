@@ -107,11 +107,11 @@ mnemon:
 | `memoryView.entries.<entry>.config` | `{}` | the options a component declares | Options saved from a component's page. On/off is not stored here: DSH's plugin manager writes it as the Entry's `disabled` row in the profile patch, and earlier saved choices are moved there once |
 | `persistenceStrategy` | `{ mode: manual }` | `manual` / `automatic`, `providerId`, `prompt`, `rules` | Provider for new spaces: when a task Agent creates a Memory Space, one fixed Provider, or smart selection with allowed Providers, data boundary, required capabilities and preference; existing spaces are still chosen by name and description |
 | `recallQuality.policy` | `strict-v1` | registered policy id | Deterministic policy applied before recall content is serialized to an Agent or client |
-| `recallQuality.lowScoreThreshold` | `0.25` | 0–1, below high threshold | Normalized scores below this boundary are removed by `strict-v1` |
-| `recallQuality.highScoreThreshold` | `0.6` | 0–1, above low threshold | Retained normalized scores at or above this boundary are labeled high relevance |
+| `recallQuality.lowScoreThreshold` | `0.25` | 0–1, below high threshold | Calibrated scores below this boundary are removed by `strict-v1`. Only Mnemon Native and Holographic report calibrated scores; other Providers' rows are `ranked` and never compared with these thresholds |
+| `recallQuality.highScoreThreshold` | `0.6` | 0–1, above low threshold | Retained calibrated scores at or above this boundary are labeled high relevance |
 | `recallQuality.candidateMultiplier` | `3` | 1–5 | Expands each Provider request before filtering, capped by the service limit of 50 candidates |
 | `recallQuality.maxMediumResults` | `4` | 0–50 | Maximum medium-relevance rows admitted by `strict-v1` after all high-relevance rows |
-| `recallQuality.maxUnknownResults` | `2` | 0–50 | Maximum unscored or unknown-scale rows admitted by `strict-v1` after scored evidence |
+| `recallQuality.maxUnknownResults` | `2` | 0–50 | Maximum unscored or out-of-range rows admitted by `strict-v1` after scored evidence; `ranked` rows are not counted and keep their place in the federated order |
 | `routingGuidance` | `true` | boolean | Whether to register an additional tiered-routing system section |
 | `lifecycleEnabled` | `true` | boolean | Whether to enable the pre-step cue and score-based idle review |
 | `recallMode` | `guided` | `guided` / `off` | Whether to inject one durable on-demand recall cue per session; does not remove explicit recall |

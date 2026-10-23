@@ -1,0 +1,287 @@
+{
+  "issue": 454,
+  "date": "2026-10-23",
+  "baseline": "main a7e3bc54",
+  "environment": {
+    "os": "macOS arm64 (Darwin 24.6.0)",
+    "node": "24.19.0",
+    "pnpm": "10.13.1",
+    "hindsight": "ghcr.io/vectorize-io/hindsight 0.10.1 from provider-lab (local embeddings and reranker), bank dsh-lab seeded with the lab facts",
+    "openviking": "v0.4.21 Docker image, API key auth, text-embedding-ada-002; account wp454 with four unrelated synthetic notes",
+    "path": "MemoryCompositionRunner with dsh-mnemon-source-memory-spaces and the Hindsight and OpenViking Providers; search with limit 4 in smart mode"
+  },
+  "hindsightFinalScores": {
+    "relevantQuery": [
+      1.0907302,
+      1.0850208
+    ],
+    "unrelatedQuery": [
+      2.805e-05,
+      1.979e-05
+    ],
+    "note": "scores.final adds reranker and recency boosts; the same Provider answers on scales five orders of magnitude apart"
+  },
+  "runs": {
+    "real-main": {
+      "query": "新建记忆空间时，由谁、按什么规则选择 Provider？",
+      "results": [
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.6867597103118896,
+          "content": "The desk lamp in room 204 takes an E27 bulb."
+        },
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.6808359026908875,
+          "content": "The office printer on floor 3 needs the PCL6 driver."
+        },
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.6744073033332825,
+          "content": "The nightly backup job copies the wiki to cold storage at 01:00."
+        },
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.6635113954544067,
+          "content": "The lab VPN profile is called lab-tunnel and uses WireGuard."
+        }
+      ],
+      "sources": [
+        {
+          "provider": "hindsight",
+          "status": "ready",
+          "kept": 8,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 8,
+            "retained": 8,
+            "selected": 0,
+            "droppedLowScore": 0,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 6
+          }
+        },
+        {
+          "provider": "openviking",
+          "status": "ready",
+          "kept": 4,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 4,
+            "retained": 4,
+            "selected": 4,
+            "droppedLowScore": 0,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 0
+          }
+        }
+      ]
+    },
+    "real-fix": {
+      "query": "新建记忆空间时，由谁、按什么规则选择 Provider？",
+      "results": [
+        {
+          "provider": "hindsight",
+          "tier": "ranked",
+          "score": 1.0907302073355931,
+          "content": "用户可以使用规则和Prompt描述数据边界、共享倾向和能力要求，由LLM在允许的Provider候选中作出可解释选择。"
+        },
+        {
+          "provider": "openviking",
+          "tier": "ranked",
+          "score": 0.6867597103118896,
+          "content": "The desk lamp in room 204 takes an E27 bulb."
+        },
+        {
+          "provider": "hindsight",
+          "tier": "ranked",
+          "score": 1.0850208409310302,
+          "content": "WebUI 不把所有 Provider 伪装成相同数据库：概览区分真实关系图与内容投影，内容区分可枚举与仅查询，实体页只展示真实实体索引"
+        },
+        {
+          "provider": "openviking",
+          "tier": "ranked",
+          "score": 0.6808359026908875,
+          "content": "The office printer on floor 3 needs the PCL6 driver."
+        }
+      ],
+      "sources": [
+        {
+          "provider": "hindsight",
+          "status": "ready",
+          "kept": 8,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 8,
+            "retained": 8,
+            "selected": 2,
+            "droppedLowScore": 0,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 8,
+            "outOfRange": 0
+          }
+        },
+        {
+          "provider": "openviking",
+          "status": "ready",
+          "kept": 4,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 4,
+            "retained": 4,
+            "selected": 2,
+            "droppedLowScore": 0,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 4,
+            "outOfRange": 0
+          }
+        }
+      ]
+    },
+    "real-main-unrelated": {
+      "query": "Which espresso machine does the kitchen use?",
+      "results": [
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.7405602931976318,
+          "content": "The office printer on floor 3 needs the PCL6 driver."
+        },
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.7357935905456543,
+          "content": "The desk lamp in room 204 takes an E27 bulb."
+        },
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.6727585792541504,
+          "content": "The lab VPN profile is called lab-tunnel and uses WireGuard."
+        },
+        {
+          "provider": "openviking",
+          "tier": "high",
+          "score": 0.6726281642913818,
+          "content": "The nightly backup job copies the wiki to cold storage at 01:00."
+        }
+      ],
+      "sources": [
+        {
+          "provider": "hindsight",
+          "status": "empty",
+          "kept": 0,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 8,
+            "retained": 0,
+            "selected": 0,
+            "droppedLowScore": 8,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 0
+          }
+        },
+        {
+          "provider": "openviking",
+          "status": "ready",
+          "kept": 4,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 4,
+            "retained": 4,
+            "selected": 4,
+            "droppedLowScore": 0,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 0
+          }
+        }
+      ]
+    },
+    "real-fix-unrelated": {
+      "query": "Which espresso machine does the kitchen use?",
+      "results": [
+        {
+          "provider": "hindsight",
+          "tier": "ranked",
+          "score": 2.8059332418874142e-05,
+          "content": "模型与向量计算通过本机 Ollama 完成"
+        },
+        {
+          "provider": "openviking",
+          "tier": "ranked",
+          "score": 0.7405602931976318,
+          "content": "The office printer on floor 3 needs the PCL6 driver."
+        },
+        {
+          "provider": "hindsight",
+          "tier": "ranked",
+          "score": 1.9796962319717044e-05,
+          "content": "DSH 记忆系统采用三层结构：运行时热记忆、项目档案、可替换的长期记忆 Provider。"
+        },
+        {
+          "provider": "openviking",
+          "tier": "ranked",
+          "score": 0.7357935905456543,
+          "content": "The desk lamp in room 204 takes an E27 bulb."
+        }
+      ],
+      "sources": [
+        {
+          "provider": "hindsight",
+          "status": "ready",
+          "kept": 8,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 8,
+            "retained": 8,
+            "selected": 2,
+            "droppedLowScore": 0,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 8,
+            "outOfRange": 0
+          }
+        },
+        {
+          "provider": "openviking",
+          "status": "ready",
+          "kept": 4,
+          "quality": {
+            "policyId": "strict-v1",
+            "fetched": 4,
+            "retained": 4,
+            "selected": 2,
+            "droppedLowScore": 0,
+            "droppedNonPositiveScore": 0,
+            "droppedInvalidScore": 0,
+            "unscored": 0,
+            "unscaled": 4,
+            "outOfRange": 0
+          }
+        }
+      ]
+    }
+  },
+  "unitTests": {
+    "memorySpacesBaseline": "5 failed, 82 passed (recall-quality and service specs, new tests against main sources)",
+    "calibratedEquivalence": "200 deterministic rounds of calibrated candidates: identical actions, tiers, normalized scores and selection; only the reason for scores above 1 becomes out-of-range-score",
+    "strategyAdmission": "ranked rows are admitted like high ones, up to the four-result first attempt, while unknown rows stay at one per attempt; passes on main too, because the strategy already admitted tiers it does not name like high, so it pins the admission the fix relies on (a mutation treating ranked as unknown fails it)"
+  }
+}

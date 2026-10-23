@@ -14,6 +14,10 @@ export const MEMORY_SPACE_PROVIDER_API_VERSION = 'dsh-mnemon.memory-space-provid
 const STABLE_ID = /^[a-z][a-z0-9-]{0,127}$/u
 const FIELD_KEY = /^[a-z][a-zA-Z0-9_-]{0,127}$/u
 
+/**
+ * `normalized-relevance`: calibrated 0..1 scores, banded by fixed thresholds. `provider-native`: the
+ * engine's own scale, whose rows keep their order as `ranked`. `none`: results carry no meaningful score.
+ */
 export type MemorySpaceProviderScoreSemantics = 'normalized-relevance' | 'provider-native' | 'none'
 
 /**

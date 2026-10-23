@@ -107,11 +107,11 @@ mnemon:
 | `memoryView.entries.<entry>.config` | `{}` | 组件声明的选项 | 在组件页保存的选项。开关状态不在这里：DSH 插件管理器把它写为 profile patch 中对应 Entry 的 `disabled` 行，早先保存的选择会一次性迁移过去 |
 | `persistenceStrategy` | `{ mode: manual }` | `manual` / `automatic`、`providerId`、`prompt`、`rules` | 新空间的 Provider：任务 Agent 新建记忆空间时固定使用一个 Provider，或按允许的 Provider、数据边界、必需能力与偏好智能选择；已有空间仍按名称与说明路由 |
 | `recallQuality.policy` | `strict-v1` | 已注册策略 ID | 在召回正文序列化给 Agent 或客户端前执行的确定性策略 |
-| `recallQuality.lowScoreThreshold` | `0.25` | 0–1，低于高分阈值 | `strict-v1` 会移除低于此边界的标准化分数结果 |
-| `recallQuality.highScoreThreshold` | `0.6` | 0–1，高于低分阈值 | 保留结果达到此边界时标记为高相关度 |
+| `recallQuality.lowScoreThreshold` | `0.25` | 0–1，低于高分阈值 | `strict-v1` 会移除低于此边界的已校准分数结果。只有 Mnemon Native 与 Holographic 报告已校准的分数；其他 Provider 的结果为 `ranked`，从不与这些阈值比较 |
+| `recallQuality.highScoreThreshold` | `0.6` | 0–1，高于低分阈值 | 保留的已校准分数达到此边界时标记为高相关度 |
 | `recallQuality.candidateMultiplier` | `3` | 1–5 | 在过滤前扩大各 Provider 候选请求，最多不超过服务的 50 条上限 |
 | `recallQuality.maxMediumResults` | `4` | 0–50 | `strict-v1` 在全部高相关度结果之后最多接纳的中相关度条数 |
-| `recallQuality.maxUnknownResults` | `2` | 0–50 | `strict-v1` 在有分数证据之后最多接纳的无 score 或未知量纲条数 |
+| `recallQuality.maxUnknownResults` | `2` | 0–50 | `strict-v1` 在有分数证据之后最多接纳的无 score 或超出范围的条数；`ranked` 结果不计入，并保留其在联合排序中的位置 |
 | `routingGuidance` | `true` | boolean | 是否注册额外的分层路由 system section |
 | `lifecycleEnabled` | `true` | boolean | 是否启用 pre-step cue 和评分空闲审查 |
 | `recallMode` | `guided` | `guided` / `off` | 是否在每个会话注入一次可持续复用的按需 recall cue；不移除显式召回 |

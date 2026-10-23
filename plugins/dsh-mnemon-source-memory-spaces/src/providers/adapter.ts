@@ -57,7 +57,11 @@ export interface ProviderSearchResult {
 }
 
 export interface ProviderScoreSemantics {
-  /** Provider promises a finite relevance score in 0..1 where larger is better. */
+  /**
+   * Provider promises a calibrated relevance score in 0..1 where larger is better, so fixed
+   * thresholds mean the same in every query and Memory Space. An adapter that passes on an
+   * engine's own scale omits this: recall then trusts its order only.
+   */
   kind: 'normalized-relevance'
 }
 

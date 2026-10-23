@@ -939,7 +939,7 @@ export class MemorySpacesService {
       ...(quality.fallbackFrom === undefined ? {} : { fallbackFrom: quality.fallbackFrom }),
       fetched: 0, retained: 0, selected: 0,
       droppedLowScore: 0, droppedNonPositiveScore: 0, droppedInvalidScore: 0,
-      unscored: 0, unscaled: 0,
+      unscored: 0, unscaled: 0, outOfRange: 0,
     })
     // Each candidate contributes once, rather than rescanning all candidates per space.
     for (const { candidate, decision } of quality.evaluated) {
@@ -953,7 +953,8 @@ export class MemorySpacesService {
         if (decision.reason === 'invalid-score') stats.droppedInvalidScore += 1
       }
       if (decision.reason === 'unscored') stats.unscored += 1
-      if (decision.reason === 'unscaled-score') stats.unscaled += 1
+      if (decision.reason === 'uncalibrated-score' || decision.reason === 'unscaled-score') stats.unscaled += 1
+      if (decision.reason === 'out-of-range-score') stats.outOfRange += 1
     }
     for (const { candidate } of quality.selected) {
       const stats = qualityStats.get(candidate.memoryBodyId)

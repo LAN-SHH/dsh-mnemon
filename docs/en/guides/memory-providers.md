@@ -26,6 +26,8 @@ Each adapter is an independently published `dsh-mnemon-provider-*` package, inst
 
 The Host exposes only capabilities an adapter can honor. UI actions and Agent tools do not fabricate missing graph, related, link, browse, or deletion behavior.
 
+**Recall scores.** Only Mnemon Native and Holographic report scores that Mnemon calibrates to 0–1, so only their results are banded high, medium or low by `recallQuality`. The other Providers report their engines' own scales: OpenViking passes on the similarity of whichever embedding model its server uses, Mem0, Supermemory and RetainDB pass on their services' own scores, Hindsight's final score adds reranker and recency boosts and can pass 1, Honcho reports none, and ByteRover always reports 1. Their results are `ranked`: they keep their Provider's own order and take their turn by rank among the other spaces' results, within the recall limit, instead of being judged by fixed thresholds (#454).
+
 ## Service and Memory Space fields
 
 | Provider | Workspace behavior | Service configuration on Memory Spaces' page | Instance configuration in Memory Spaces |

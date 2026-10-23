@@ -26,6 +26,8 @@
 
 Host 只暴露适配器能够兑现的能力；UI 与 Agent 工具不会伪造缺失的图谱、关联、链接、浏览或删除语义。
 
+**召回分数。** 只有 Mnemon Native 与 Holographic 报告由 Mnemon 校准到 0–1 的分数，因此只有它们的结果会被 `recallQuality` 分为高、中、低三档。其他 Provider 报告的是各自引擎的尺度：OpenViking 透传其服务端所用 embedding 模型的相似度，Mem0、Supermemory 与 RetainDB 透传各自服务的分数，Hindsight 的最终分数叠加了 reranker 与时效加成、可能超过 1，Honcho 不报告分数，ByteRover 始终报告 1。它们的结果为 `ranked`：保留 Provider 自己的顺序，在召回上限内与其他空间的结果按名次轮流排列，而不再用固定阈值判断（#454）。
+
 <a id="服务与记忆体字段"></a>
 
 ## 服务与记忆空间字段

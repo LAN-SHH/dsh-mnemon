@@ -1243,6 +1243,54 @@ describe('MemorySpacesService', () => {
     })
   })
 
+  it('#454: ranks a Hindsight answer by its own rank, not below weak OpenViking rows, and bands neither', async () => {
+    const memories = [
+      { uri: 'viking://user/team/memories/entities/a.md', text: 'Weak clue about the office printer.', score: 0.7107269167900085 },
+      { uri: 'viking://user/team/memories/entities/b.md', text: 'Weak clue about a backup job.', score: 0.7017678022384644 },
+      { uri: 'viking://user/team/memories/entities/c.md', text: 'Weak clue about a VPN profile.', score: 0.685615599155426 },
+      { uri: 'viking://user/team/memories/entities/d.md', text: 'Weak clue about a desk lamp.', score: 0.6702136397361755 },
+    ]
+    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+      const target = new URL(String(url))
+      const reply = (result: unknown) => new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (target.pathname.endsWith('/memories/recall')) {
+        expect(JSON.parse(String(init?.body))).toMatchObject({ query: 'Docker engine and Compose versions' })
+        // Hindsight's final score adds reranker and recency boosts, so it passes 1.
+        return reply({ results: [{ id: 'docker-versions', text: 'Docker Engine 29.8.0 and Compose v5.5.1 on this machine.', scores: { final: 1.0379764538482916 } }] })
+      }
+      if (target.pathname === '/api/v1/content/read') return reply({ status: 'ok', result: memories.find(memory => memory.uri === target.searchParams.get('uri'))?.text })
+      if (target.pathname === '/api/v1/search/find') return reply({ status: 'ok', result: { memories: memories.map(({ uri, score }) => ({ uri, overview: 'Summary', score })) } })
+      throw new Error('unexpected request ' + target.pathname)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { service } = fixture()
+    const hindsight = await service.createSpace({
+      name: 'Machine notes', description: 'Facts about this machine.', active: true, providerId: 'hindsight',
+      connection: { endpoint: 'https://hindsight.example', bankId: 'machine' },
+    })
+    const openViking = await service.createSpace({
+      name: 'Team notes', description: 'Shared team memory.', active: true, providerId: 'openviking',
+      openViking: { endpoint: 'https://memory.example.com', targetUri: 'viking://user/team/memories' },
+    })
+
+    // Four rows fit. On main the weak OpenViking rows were banded high (0.6 and above) and filled them,
+    // so the out-of-scale Hindsight answer was left out before any later reordering could see it.
+    const result = await service.search({ query: 'Docker engine and Compose versions', limit: 4, memoryBodyIds: [hindsight.id, openViking.id] })
+
+    expect(result.results.map(item => item.id)).toEqual([
+      'docker-versions',
+      'viking://user/team/memories/entities/a.md',
+      'viking://user/team/memories/entities/b.md',
+      'viking://user/team/memories/entities/c.md',
+    ])
+    expect(result.results.map(item => item.relevanceTier)).toEqual(['ranked', 'ranked', 'ranked', 'ranked'])
+    expect(result.results.every(item => item.normalizedScore === undefined)).toBe(true)
+    expect(result.sources).toEqual([
+      expect.objectContaining({ memoryBodyId: hindsight.id, quality: expect.objectContaining({ fetched: 1, unscaled: 1, outOfRange: 0, selected: 1 }) }),
+      expect.objectContaining({ memoryBodyId: openViking.id, quality: expect.objectContaining({ fetched: 4, unscaled: 4, outOfRange: 0, selected: 3 }) }),
+    ])
+  })
+
   it('reports query-only providers without pretending they expose an enumerable content list', async () => {
     const { service } = fixture()
     const provider = {

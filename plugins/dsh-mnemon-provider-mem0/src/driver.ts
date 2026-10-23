@@ -11,7 +11,7 @@ import {
   jsonString,
   type HttpProviderOptions,
 } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
-import { NORMALIZED_RELEVANCE_SCORE, type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
+import { type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 
 function category(item: Record<string, unknown>): string {
   const categories = jsonArray(item.categories).filter((value): value is string => typeof value === 'string')
@@ -39,7 +39,6 @@ function insight(value: unknown): Insight | undefined {
 
 export class Mem0Provider extends HttpMemoryProvider implements MemoryProviderAdapter {
   readonly id = 'mem0' as const
-  readonly scoreSemantics = NORMALIZED_RELEVANCE_SCORE
 
   constructor(memorySpaces: MemorySpaceAuthority, options: HttpProviderOptions = {}) {
     super(memorySpaces, { label: descriptor.label, ...options })

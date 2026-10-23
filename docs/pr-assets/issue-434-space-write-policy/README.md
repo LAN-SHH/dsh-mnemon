@@ -46,10 +46,47 @@ The same scenario ran on main and on the branch, against the same two banks, the
 
 On the branch, each receipt from the DSH bank says `queued`, with completion `accepted`, never `committed`. Hindsight extracts in the background, and the policy does not change how such a receipt reads. `wp434-dsh` held two memories before the branch run. They came from an earlier run of the same branch scenario, whose recall ran before Hindsight had stored its writes; that run is not recorded.
 
+## In the WebUI
+
+`scripts/serve-e2e.mjs --remember-target` ran the real DSH WebUI with a fresh fixture: the docs demo's Mnemon Native spaces, and a scripted model that names Lumen 项目 for a memory. It ran on main `a7e3bc54` (port 19662) and on this branch (port 19663), driven by headless Chrome over CDP, in light mode, in English and Chinese. The space names are the fixture's Chinese ones in both languages.
+
+**The choice, in the space's Edit dialog.** Main has no such choice. On the branch, **Writes** offers **Writable**, selected by default, and **Read only**, each with what it means beside it.
+
+| main | this change |
+|---|---|
+| ![main: no write choice](./en-edit-before.jpg) | ![this change: Writable selected](./en-edit-after.jpg) |
+| ![main, Chinese](./zh-edit-before.jpg) | ![this change, Chinese](./zh-edit-after.jpg) |
+
+| Read only chosen | Read only chosen, Chinese |
+|---|---|
+| ![Read only selected](./en-edit-read-only-after.jpg) | ![Read only selected, Chinese](./zh-edit-read-only-after.jpg) |
+
+**The card.** After saving, the card of Lumen 项目 shows **Read only**. Its Delete button is disabled, because a read-only Mnemon Native space keeps its Store; hovering over it says so.
+
+| main | this change |
+|---|---|
+| ![main: the cards](./en-cards-before.jpg) | ![this change: Read only on Lumen 项目](./en-cards-after.jpg) |
+| ![main, Chinese](./zh-cards-before.jpg) | ![this change, Chinese](./zh-cards-after.jpg) |
+
+**Save to memory in a conversation.** Main offers Lumen 项目 as a destination. The branch leaves it out and still offers 团队约定, the other active space.
+
+| main | this change |
+|---|---|
+| ![main: Lumen 项目 offered](./en-save-to-before.jpg) | ![this change: Lumen 项目 not offered](./en-save-to-after.jpg) |
+| ![main, Chinese](./zh-save-to-before.jpg) | ![this change, Chinese](./zh-save-to-after.jpg) |
+
+**A write the model aims at the space.** On `remember-target-check` the model lists the spaces and calls `mnemon_remember` naming Lumen 项目. On main the task Agent writes it there (`added`). On the branch the Host refuses before any task Agent runs, and the model passes on the refusal: `Memory Space "default" (Lumen 项目) is read only: it is recalled and takes no writes. Name a writable space.` The model's own words are scripted, in Chinese, in both languages.
+
+| main | this change |
+|---|---|
+| ![main: written to Lumen 项目](./zh-remember-before.jpg) | ![this change: refused](./zh-remember-after.jpg) |
+
+![this change, English interface](./en-remember-after.jpg)
+
 ## Tests
 
 - `plugins/dsh-mnemon-source-memory-spaces/tests/write-policy.spec.ts` drives the real Source with a counting bank Provider. One test covers each write path: View remember, forget and link, and management remember, a batch, forget and link. Further tests cover these cases: a legacy id named explicitly, while the space is inactive and after it is switched on; a space made by hand for the same bank; a space whose settings move to that bank; a disconnect followed by a new mount; a policy changed after a View was composed; the default destination; no fallback; and the facts and write scope. Over Mnemon Native, the tests cover these cases: no Store-changing command for remember, a batch, forget, link, merge, vector fill or delete; a batch stopped at a destination that turned read only; an unreadable or unsupported file; a restart and another data directory; and no change without a policy.
-- `write-policy-page.spec.tsx` renders the real page against the real Source. It covers the choice, the badge and changing back.
+- `write-policy-page.spec.tsx` renders the real page against the real Source. It covers the choice, the badge, changing back, and the page's own Save to memory dialog, which offers no read-only space.
 - Root tests cover the rest. The layer-combination matrix gains a read-only space for MEMORY.md and Document archival through the Agent tool, the web page and the Host's own path, and for what the View offers. The task Agent's target check and tool guard are tested, the Save to memory place list leaves read-only spaces out, and **Fill in** is not offered for a read-only Native space.
 
 ```text
@@ -63,7 +100,8 @@ node scripts/verify-docs.mjs
 
 ## Limits
 
-- No WebUI recording. The page test renders the real page against a real Source and real Providers.
+- The WebUI screens use Mnemon Native spaces, not the Hindsight banks, because the e2e fixture has no Hindsight. The write path they show is the same one the Hindsight scenario above measures.
+- On main, the English run of `remember-target-check` repeated the memory the Chinese run had saved. Mnemon recognized the duplicate, so that run shows nothing new, and the record keeps only the Chinese screen.
 - Hindsight is never an archive destination, because its writes are async-extracting. Archival into a read-only Hindsight bank cannot happen on either version, so archival is checked with Mnemon Native in the layer matrix.
 - The task Agent writer needs a model. Its target check and tool guard are checked in the Host tests, not live.
 - A Pack restore and Git sync copy whole stores. The policy governs DSH's own writes, so it does not stop them. Neither carries the policy file, and neither removes it.

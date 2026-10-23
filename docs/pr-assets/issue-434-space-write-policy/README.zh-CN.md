@@ -46,10 +46,47 @@ main 与分支对同样的两个 bank 运行同一个场景。先运行分支，
 
 在分支上，DSH bank 返回的每个回执都是 `queued`，完成状态为 `accepted`，不会是 `committed`。Hindsight 在后台完成提取，只读设置不改变这类回执的含义。分支运行前，`wp434-dsh` 已有两条记忆。它们来自同一分支场景更早的一次运行；那次运行的召回发生在 Hindsight 存好写入之前，因此没有记录。
 
+## WebUI 中的表现
+
+`scripts/serve-e2e.mjs --remember-target` 用全新的夹具运行真实的 DSH WebUI：夹具含文档演示用的几个 Mnemon Native 空间，以及一个按脚本把记忆指定写入 Lumen 项目的模型。main `a7e3bc54`（端口 19662）与本分支（端口 19663）各运行一次，由 headless Chrome 经 CDP 操作，浅色模式，中英文各一遍。两种语言下空间名称都是夹具中的中文名。
+
+**选择项在空间的编辑对话框中。** main 没有这个选择。在本分支上，**写入**下有**可写入**（默认选中）和**只读**两项，旁边写明各自的含义。
+
+| main | 本改动 |
+|---|---|
+| ![main：没有写入选项](./zh-edit-before.jpg) | ![本改动：选中可写入](./zh-edit-after.jpg) |
+| ![main，英文界面](./en-edit-before.jpg) | ![本改动，英文界面](./en-edit-after.jpg) |
+
+| 选择只读 | 选择只读，英文界面 |
+|---|---|
+| ![选中只读](./zh-edit-read-only-after.jpg) | ![选中只读，英文界面](./en-edit-read-only-after.jpg) |
+
+**卡片。** 保存后，Lumen 项目的卡片显示**只读**。它的删除按钮不可用，因为只读的 Mnemon Native 空间会保留它的 Store；鼠标悬停时会说明这一点。
+
+| main | 本改动 |
+|---|---|
+| ![main：卡片](./zh-cards-before.jpg) | ![本改动：Lumen 项目显示只读](./zh-cards-after.jpg) |
+| ![main，英文界面](./en-cards-before.jpg) | ![本改动，英文界面](./en-cards-after.jpg) |
+
+**对话中的“存入记忆”。** main 把 Lumen 项目列为可选去处。本分支不再列出它，另一个已激活的空间“团队约定”仍在列表中。
+
+| main | 本改动 |
+|---|---|
+| ![main：列出 Lumen 项目](./zh-save-to-before.jpg) | ![本改动：不再列出 Lumen 项目](./zh-save-to-after.jpg) |
+| ![main，英文界面](./en-save-to-before.jpg) | ![本改动，英文界面](./en-save-to-after.jpg) |
+
+**模型把写入指向该空间。** 收到 `remember-target-check` 后，模型先列出空间，再调用 `mnemon_remember` 并指定 Lumen 项目。在 main 上，任务 Agent 把记忆写进了该空间（`added`）。在本分支上，Host 在任何任务 Agent 运行之前就拒绝了这次写入，模型转述拒绝原因：`Memory Space "default" (Lumen 项目) is read only: it is recalled and takes no writes. Name a writable space.` 模型的回复由脚本给出，两种语言下都是中文。
+
+| main | 本改动 |
+|---|---|
+| ![main：写入 Lumen 项目](./zh-remember-before.jpg) | ![本改动：被拒绝](./zh-remember-after.jpg) |
+
+![本改动，英文界面](./en-remember-after.jpg)
+
 ## 测试
 
 - `plugins/dsh-mnemon-source-memory-spaces/tests/write-policy.spec.ts` 用一个统计写入次数的 bank Provider 驱动真实的 Source。每条写入路径各有一项测试：View 的存入、遗忘与链接，以及管理操作的存入、批量写入、遗忘与链接。其余测试覆盖以下情形：显式指定旧空间（未激活时与重新打开后）；为同一 bank 手动创建的空间；设置改为指向该 bank 的空间；断开后重新挂载；View 组成后更改设置；默认目标；不退回；facts 与写入范围。在 Mnemon Native 上，测试覆盖以下情形：存入、批量写入、遗忘、链接、合并、补齐向量与删除都不运行任何修改 Store 的命令；批量写入在目标变为只读时停下；设置文件无法读取或格式不支持；重启以及另一个数据目录；没有设置时行为不变。
-- `write-policy-page.spec.tsx` 在真实 Source 上渲染真实页面，覆盖选择、卡片标记与改回可写入。
+- `write-policy-page.spec.tsx` 在真实 Source 上渲染真实页面，覆盖选择、卡片标记、改回可写入，以及页面自身的“存入记忆”对话框不提供只读空间。
 - 其余由根目录测试覆盖。层组合矩阵新增只读空间：覆盖经 Agent 工具、网页与 Host 自身路径的 MEMORY.md 归档与文档归档，以及 View 提供的内容。任务 Agent 的目标检查与工具守卫也有测试；“存入记忆”的去处列表不含只读空间；只读 Native 空间不提供**补齐**。
 
 ```text
@@ -63,7 +100,8 @@ node scripts/verify-docs.mjs
 
 ## 限制
 
-- 没有录制 WebUI。页面测试在真实 Source 与真实 Provider 上渲染真实页面。
+- WebUI 截图使用 Mnemon Native 空间，而不是 Hindsight bank，因为 e2e 夹具中没有 Hindsight。截图展示的写入路径，与上文 Hindsight 场景测量的路径相同。
+- 在 main 上，英文那一遍的 `remember-target-check` 重复了中文那一遍已经存入的记忆。Mnemon 识别出重复，因此那一遍没有新内容，记录中只保留中文截图。
 - Hindsight 的写入是异步提取，因此它从来不是归档目标。在两个版本上都不会发生向只读 Hindsight bank 归档的情况，所以归档在层组合矩阵中用 Mnemon Native 验证。
 - 任务 Agent 写入方需要模型。它的目标检查与工具守卫在 Host 测试中验证，没有实际运行。
 - Pack 恢复与 Git 同步会复制整个存储。只读设置约束的是 DSH 自己的写入，所以不会阻止它们。两者都不携带设置文件，也都不会删除它。

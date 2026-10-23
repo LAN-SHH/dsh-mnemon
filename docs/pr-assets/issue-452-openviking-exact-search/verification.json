@@ -1558,6 +1558,6 @@
     "note": "grep answers 404 NOT_FOUND naming the root; the provider returns no results"
   },
   "related": {
-    "461": "ranks rows from Providers without calibrated scores, OpenViking's included, at their federated position (tier ranked) instead of unknown; the review checked on a local merge that this PR's rows then arrive as ranked. It should land first or together with this PR."
+    "461": "narrowed at 4bf0a2d0: under the default strict-v1, a search of OpenViking alone keeps at most two unscored (unknown) results and model recall admits one per attempt; when the search also covers another Provider and both thresholds are at their defaults, OpenViking's results keep OpenViking's own order, scored and unscored together, at most recallQuality.maxRankedResults per search (two by default), after the high-relevance results, and model recall admits them like high-relevance results. It should land first or together with this PR."
   }
 }

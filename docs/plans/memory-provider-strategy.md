@@ -23,11 +23,11 @@ Strategies and View between them. Existing features may change where the experie
 
 ## Reference: Hermes Agent
 
-Hermes Agent supports the same eight third-party memory providers, so it was studied as a reference.
-The notes below come from `NousResearch/hermes-agent` at `cb757fac59` (MIT). Mnemon is not a copy of
-Hermes: the choices below are taken only where they fit Mnemon's layers.
+Hermes Agent also integrates these eight third-party memory providers, and it follows a different
+strategy. As a mature implementation it is one of the references for this plan. The notes below come
+from `NousResearch/hermes-agent` at `cb757fac59` (MIT).
 
-What Hermes does:
+How Hermes handles them:
 
 - **One external provider beside built-in memory.** MEMORY.md and USER.md are always on, and at most
   one external provider runs beside them; `MemoryManager.add_provider` rejects a second one.
@@ -48,23 +48,19 @@ What Hermes does:
 - **Maintainers own the providers.** Providers live in their maintainers' repositories. The
   provider's name, settings and tool names are kept as the contract with users.
 
-What Mnemon takes:
+How it compares:
 
-- one primary Provider and its native verbs;
-- tool names users already know from these vendors;
-- recall kept per Provider;
-- Agent isolation;
-- the egress scrub;
-- a short setup.
-
-What Mnemon keeps differently:
-
-- **Three layers, not one store.** Project Documents and several discovered spaces per Provider stay.
-- **Receipts.** A write is reported only after the exact text reads back.
-- **The View.** Vendor tools reach the model only as View routes.
-- **Tool-driven recall by default.** Hermes prefetches and syncs automatically; here those are opt-in.
-- **Bridged vendor plugins.** Mnemon bridges a vendor's existing DSH plugin; it does not ask vendors
-  for a Mnemon-specific package.
+- **The strategies differ.**
+  - Hermes makes the external provider the memory backend and runs it automatically every turn.
+  - Mnemon composes Runtime memory, Project Documents and Memory Spaces through a View. It keeps
+    several discovered spaces per Provider and reports a write only after the exact text reads back.
+    Recall is tool-driven by default, so prefetch and sync are opt-in.
+  - Hermes providers are packages written for Hermes. Mnemon bridges the DSH plugins vendors already
+    publish.
+- **Some decisions coincide.** One primary Provider at a time, Provider-native tools under the names
+  users know, no Provider session for delegated Agents, and a scrub of what leaves the machine. These
+  are made here for the reasons in the Aim: #452–#455 and the lab's costs. They are not made to
+  match Hermes.
 
 ## Decisions (2026-10-23)
 
@@ -206,7 +202,8 @@ naming its Provider.
 Score bands are removed for Providers whose scores are not calibrated (#454). Ranking then rests on
 the Provider's own rank and the Agent's own judgment, plus Jev's yes/rank signals in simple mode.
 
-A short line in the conversation shows which spaces were used: "🧠 Lab machines (OpenViking) · 3".
+A short line in the conversation shows which spaces were used, such as "Memory used: Lab machines
+(OpenViking) · 3".
 
 ### Automation
 

@@ -31,7 +31,7 @@ All services listen on loopback. The Memory Spaces Source and the three-tier str
 - **Everything else is main.**
   - Mem0, Supermemory, RetainDB, ByteRover and Honcho keep their declarations.
   - The decision reasons and quality stats are unchanged; `unscaled` also counts ranked OpenViking rows.
-  - The Host now refuses an adapter whose score semantics disagree with its manifest, in either direction.
+  - The Host's checks are main's: recall reads the adapter's score semantics, and only a manifest that claims normalized scores its adapter does not report is refused.
 
 ## Why at most two OpenViking rows
 
@@ -70,13 +70,12 @@ The queries were "新建记忆空间时，由谁、按什么规则选择 Provide
   - the review scenarios: Native with unrelated Hindsight rows, Native with Honcho, Hindsight alone, and a Native medium answer. Each selects what main selects.
 - **Byte-identity.** 400 deterministic recalls without Hindsight scores above 1 or ranked OpenViking rows. The candidate limit, every decision with its reason, and the selection match a frozen copy of main's three policies.
 - **Source tests** (`tests/service.spec.ts`) use the real adapters on stubbed HTTP: the #454 case, the reporter's thresholds, Native with unrelated Hindsight rows, Hindsight alone, and a Native score above 1.
-- **Provider semantics** (`tests/provider-conformance.spec.ts`) pins every bundled Provider's manifest and adapter. The Host check (`tests/provider-sdk.spec.ts`) refuses a disagreement in either direction.
+- **Provider semantics** (`tests/provider-conformance.spec.ts`) pins every bundled Provider's manifest and adapter. A Host test (`tests/provider-sdk.spec.ts`) keeps main's precedence: a manifest's normalized claim that the adapter does not make is refused, and an adapter's own claim stands.
 - **Strategy test** (`plugins/dsh-mnemon-strategy-default-three-tier/tests/retrieval.spec.ts`): ranked rows are admitted like high ones, unknown rows one per attempt.
-- **On main** 9 of the 310 Memory Spaces tests fail; the strategy test passes there, because the strategy already admits a tier it does not name like a high one.
+- **On main** 8 of the 310 Memory Spaces tests fail. The Host test passes there, since it pins main's precedence, and so does the strategy test, because the strategy already admits a tier it does not name like a high one.
 
 ## Limits
 
 - **#454 stays open.** Per-Provider thresholds and a separate reason for an out-of-range score are not part of this change, so the pull request refers to #454 instead of closing it.
 - **Other Providers.** Mem0, Supermemory, RetainDB and ByteRover are unchanged; their scales were not measured.
-- **Third-party Providers.** One whose adapter reports normalized scores while its manifest declares another kind is now refused when it loads.
-- **The WebUI.** Its search runs the same policy. A search across spaces with default thresholds shows at most two OpenViking results; searching the OpenViking space alone shows all of them, as before. No page displays tiers, and no recording was made.
+- **The WebUI.** Its search runs the same policy. A search across spaces with default thresholds shows at most two OpenViking results, as it already holds medium and unknown-scale rows to their budgets; searching the OpenViking space alone shows all of them, as before. No page displays tiers, and no recording was made.

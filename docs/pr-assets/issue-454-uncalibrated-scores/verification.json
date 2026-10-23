@@ -1077,7 +1077,7 @@
     }
   },
   "unitTests": {
-    "memorySpacesOnMainSources": "9 failed, 299 passed, 2 skipped: the new policy, Source, Provider semantics, Host check and configuration tests",
+    "memorySpacesOnMainSources": "8 failed, 300 passed, 2 skipped: the new policy, Source, Provider semantics and configuration tests; the Host precedence test passes there, as it pins main's behavior",
     "strategyOnMainSources": "24 passed: the ranked admission test pins behavior main already has",
     "byteIdentity": "400 deterministic recalls without Hindsight scores above 1 or ranked OpenViking rows: identical candidate limit, decisions with reasons, and selection to a frozen copy of main's three policies"
   }

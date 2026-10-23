@@ -198,7 +198,7 @@ Provider 使用 Memory Spaces SDK 的 `defineMemorySpaceProvider`。模块只收
 - `{ kind: 'normalized-relevance', scale: 'boosted' }`：引擎叠加的加成可能使相关结果超过 1。这样的分数按 1 计。
 - `{ kind: 'normalized-relevance', scale: 'embedding-similarity' }`：分数是服务端 embedding 模型的原始相似度。检索同时覆盖其他 Provider、且两个阈值都是默认值时，`strict-v1` 按你给出的顺序把这些结果排在高相关度结果之后，最多 `maxRankedResults` 条。
 
-其他尺度声明为 `provider-native`，这些结果按未知量纲处理；结果没有分数时声明为 `none`。适配器的 `kind` 与 Manifest 不一致时，无论哪个方向，Host 都会拒绝。
+其他尺度声明为 `provider-native`，这些结果按未知量纲处理；结果没有分数时声明为 `none`。两处应声明相同的语义：召回读取的是适配器的声明；Manifest 声明了归一化分数而适配器没有报告时，Host 会拒绝加载。
 
 通过 Source 的 `/testing` 入口使用 `mountMemorySpaceProvider`，测试真实子节点注册、带实例别名的驱动创建和清理；返回值只有冻结的 descriptor/manifest 元信息、`registered`、`createAdapter` 与 `dispose`。`createMemorySpaceProviderFixture` 单独提供经过验证的连接及限定范围的驱动权限。[发布 API 测试](../../../scripts/fixtures/plugin-consumer/tests/public-api.spec.ts) 展示如何组合二者，不导入私有实现。
 

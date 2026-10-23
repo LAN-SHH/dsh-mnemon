@@ -31,7 +31,7 @@ Issue #454 报告：跨 Hindsight 与 OpenViking 召回时，正确答案被丢�
 - **其余一切与 main 相同。**
   - Mem0、Supermemory、RetainDB、ByteRover 与 Honcho 的声明不变。
   - 判定原因与质量统计不变；`unscaled` 也统计 ranked 的 OpenViking 结果。
-  - 适配器的分数语义与 Manifest 不一致时，无论哪个方向，Host 现在都会拒绝。
+  - Host 的检查与 main 相同：召回读取适配器的分数语义，只有 Manifest 声明了归一化分数而适配器没有报告时才拒绝加载。
 
 ## 为什么最多两条 OpenViking 结果
 
@@ -70,13 +70,12 @@ OpenViking 的分数说明不了它是否有答案，所以与其他 Provider �
   - 评审中的场景：Native 加不相关的 Hindsight 结果、Native 加 Honcho、只检索 Hindsight，以及 Native 的中相关答案。每个场景选出的结果都与 main 相同。
 - **逐字节一致。** 400 次确定性的召回，其中没有超过 1 的 Hindsight 分数，也没有 ranked 的 OpenViking 结果。候选上限、每条判定及其原因、选择结果都与冻结的 main 三个策略副本完全一致。
 - **Source 测试**（`tests/service.spec.ts`）以真实适配器配合模拟的 HTTP 响应，覆盖：#454 的情形、报告者的阈值、Native 加不相关的 Hindsight 结果、只检索 Hindsight，以及超过 1 的 Native 分数。
-- **Provider 语义**（`tests/provider-conformance.spec.ts`）固定每个内置 Provider 的 Manifest 与适配器声明。Host 检查（`tests/provider-sdk.spec.ts`）拒绝任一方向的不一致。
+- **Provider 语义**（`tests/provider-conformance.spec.ts`）固定每个内置 Provider 的 Manifest 与适配器声明。Host 测试（`tests/provider-sdk.spec.ts`）保持 main 的优先级：Manifest 声明了归一化分数而适配器没有报告时拒绝，适配器自己的声明则照常生效。
 - **三层策略测试**（`plugins/dsh-mnemon-strategy-default-three-tier/tests/retrieval.spec.ts`）：ranked 结果像高相关结果一样被接纳，未知结果每次尝试一条。
-- **在 main 上** 记忆空间的 310 项测试中有 9 项失败；策略测试在 main 上同样通过，因为策略本来就把它不认识的档位当作高相关接纳。
+- **在 main 上** 记忆空间的 310 项测试中有 8 项失败。Host 测试在 main 上通过，因为它固定的正是 main 的优先级；策略测试同样通过，因为策略本来就把它不认识的档位当作高相关接纳。
 
 ## 限制
 
 - **#454 仍保持打开。** 按 Provider 分别配置阈值，以及为超出范围的分数单独给出原因，不在本次改动之内，所以 PR 只引用 #454，不关闭它。
 - **其他 Provider。** Mem0、Supermemory、RetainDB 与 ByteRover 不变，没有测量它们的分数尺度。
-- **第三方 Provider。** 适配器报告归一化分数、而 Manifest 声明另一种语义的 Provider，现在在加载时会被拒绝。
-- **WebUI。** 它的检索使用同一策略。阈值为默认值时，跨空间检索最多显示两条 OpenViking 结果；只检索 OpenViking 空间时，仍与以前一样全部显示。没有页面展示档位，也没有录制。
+- **WebUI。** 它的检索使用同一策略。阈值为默认值时，跨空间检索最多显示两条 OpenViking 结果，正如中相关与未知量纲结果也受各自的条数限制；只检索 OpenViking 空间时，仍与以前一样全部显示。没有页面展示档位，也没有录制。

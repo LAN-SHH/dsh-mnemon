@@ -29,7 +29,7 @@ The Host exposes only capabilities an adapter can honor. UI actions and Agent to
 **Recall scores.** Recall bands every Provider's scores with the `recallQuality` thresholds, with two exceptions (#454):
 
 - Hindsight's final score adds reranker and recency boosts, so a relevant memory can score above 1; it counts as 1.
-- OpenViking passes on the similarity of whichever embedding model its server uses, which the default thresholds do not fit. When a search also covers another Provider, its results keep OpenViking's order after the high-relevance results, at most `recallQuality.maxRankedResults` of them (two by default), and keyword matches without a score count among them. Searched alone, or with a threshold you set away from its default, OpenViking's results are banded as before.
+- OpenViking passes on the similarity of whichever embedding model its server uses, which the default thresholds do not fit. When a search also covers another Provider, its results keep OpenViking's order after the high-relevance results, at most `recallQuality.maxRankedResults` of them (two by default), and keyword matches without a score count among them. Searched alone, or with a threshold you set away from its default, OpenViking's results are banded as before. The WebUI's search runs the same policy, so a search across spaces shows at most that many OpenViking results, as it already caps medium and unknown-scale results; search the OpenViking space alone to see all of them.
 
 ## Service and Memory Space fields
 

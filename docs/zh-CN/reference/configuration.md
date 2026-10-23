@@ -203,7 +203,7 @@ WebUI 从实时管理目录读取 Source 实例，新增 Source 无须修改前�
 `strict-v1` 是面向 Agent 的安全默认值，对声明为 0–1 相关度的 Provider 按分数分档：在正文进入 Agent 前移除非正分和低于阈值的结果；随后在请求上限内保留全部高相关度结果，默认最多保留 4 条中相关度结果和 2 条无 score 或未知量纲结果，不再用较弱证据补满 limit。有两个 Provider 的分数另行解读（#454）：
 
 - **Hindsight** 的最终分数叠加了 reranker 与时效加成，相关记忆可能超过 1。这样的分数在所有策略中都按 1 计。
-- **OpenViking** 报告其服务端所用 embedding 模型的原始相似度，默认阈值并不适用。检索同时覆盖其他 Provider、且两个阈值都是默认值时，`strict-v1` 按 OpenViking 自己的顺序保留它的结果（`relevanceTier: ranked`）。这些结果排在高相关度结果之后、中相关度结果之前，每次检索最多 `maxRankedResults` 条（默认两条），不带分数的关键词匹配也计入其中。只检索 OpenViking，或把任一阈值改离默认值时，OpenViking 的结果仍按原方式分档。
+- **OpenViking** 报告其服务端所用 embedding 模型的原始相似度，默认阈值并不适用。检索同时覆盖其他 Provider、且两个阈值都是默认值时，`strict-v1` 按 OpenViking 自己的顺序保留它的结果（`relevanceTier: ranked`）。这些结果排在高相关度结果之后、中相关度结果之前，每次检索最多 `maxRankedResults` 条（默认两条），不带分数的关键词匹配也计入其中。只检索 OpenViking，或把任一阈值改离默认值时，OpenViking 的结果仍按原方式分档。WebUI 的检索使用同一策略，所以跨空间检索最多显示 `maxRankedResults` 条 OpenViking 结果，正如中相关与未知量纲结果也受各自的条数限制；只检索 OpenViking 空间时会显示全部结果。
 
 `balanced-v1` 把低分结果放在主要证据之后，`exhaustive-v1` 为直接检查保留有限分数结果；两者都对 OpenViking 的结果分档。其他超过 1 的分数按未知量纲处理，不伪造成置信度。跨 Provider 排序继续使用倒数排名融合。
 

@@ -82,22 +82,22 @@ describe('Provider SDK and independent module fixture', () => {
     } finally { await mounted.dispose() }
   })
 
-  it('refuses a runtime whose score semantics disagree with its manifest, in either direction', async () => {
+  it('refuses a manifest\'s normalized claim its runtime does not make, and lets a runtime\'s own claim stand', async () => {
     const { authority } = createMemorySpaceProviderFixture(descriptor, {}, { dataDir: '/unused' })
     const runtimeOmits = adapted(definition => ({
       ...definition,
       create: context => ({ ...definition.create(context), scoreSemantics: undefined } as unknown as sdk.MemoryProviderAdapter),
     }))
+    const omitted = await mountMemorySpaceProvider(runtimeOmits, { config: undefined })
+    try {
+      expect(() => omitted.createAdapter({ memoryBodies: authority, config: { timeoutMs: 100 } })).toThrow('declares normalized scores but its runtime does not')
+    } finally { await omitted.dispose() }
+    // An installed Provider that works today keeps loading: recall reads the runtime's semantics.
     const manifestOmits = adapted(definition => ({ ...definition, manifest: { ...definition.manifest, scoreSemantics: 'provider-native' } }))
-    for (const [module, message] of [
-      [runtimeOmits, 'declares normalized scores but its runtime does not'],
-      [manifestOmits, 'reports normalized scores but declares provider-native'],
-    ] as const) {
-      const mounted = await mountMemorySpaceProvider(module, { config: undefined })
-      try {
-        expect(() => mounted.createAdapter({ memoryBodies: authority, config: { timeoutMs: 100 } })).toThrow(message)
-      } finally { await mounted.dispose() }
-    }
+    const claimed = await mountMemorySpaceProvider(manifestOmits, { config: undefined })
+    try {
+      expect(claimed.createAdapter({ memoryBodies: authority, config: { timeoutMs: 100 } }).scoreSemantics).toEqual(sdk.NORMALIZED_RELEVANCE_SCORE)
+    } finally { await claimed.dispose() }
   })
 
   it('cleans up failed or missing registrations through the real child Fiber', async () => {

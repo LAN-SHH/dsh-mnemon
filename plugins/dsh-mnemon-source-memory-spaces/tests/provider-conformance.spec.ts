@@ -176,7 +176,7 @@ describe('Memory Spaces Provider child-module conformance', () => {
     for (const entry of providerEntries) {
       const { fiber, snapshot } = await mountedSnapshot(entry, `memory-spaces-${entry.instanceId}`)
       try {
-        // Creating the adapter through the Host also checks that the manifest and the runtime agree.
+        // Both sides are pinned, so changing either one fails here; recall reads the runtime's.
         const adapter = snapshot.adapterRegistry().create({ memoryBodies: {} as never, config: resolveMemorySpacesConfig({}), nativeRunner: {} as never }).get(entry.instanceId)
         expect({ manifest: snapshot.entries[0]!.definition.manifest.scoreSemantics, runtime: adapter?.scoreSemantics }).toEqual(expected[entry.instanceId])
       } finally { await fiber.dispose() }

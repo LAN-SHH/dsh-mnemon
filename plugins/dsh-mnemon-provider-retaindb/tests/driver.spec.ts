@@ -199,4 +199,46 @@ describe('standalone retaindb data plane', () => {
       expect(await sentTypes(undefined)).toEqual([['/v1/memory', 'factual'], ['/v1/memories', 'factual']])
     })
   })
+
+  describe('receipts for what RetainDB stored', () => {
+    // RetainDB Server's legacy POST /v1/memories queues a write and answers 202 with a job unless `async` is false.
+    // Its POST /v1/memory answers a synchronous write with `memory_id`, the legacy endpoint with the stored `memory`.
+    async function rememberWith(replies: { current?: unknown; legacy?: unknown }) {
+      const sent: Array<{ path: string; json: Record<string, unknown> }> = []
+      const reply = (payload: unknown) => payload === undefined ? response({ message: 'missing' }, 404)
+        : response(payload, (payload as { mode?: string }).mode === 'async' ? 202 : 201)
+      const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+        const path = new URL(String(url)).pathname
+        sent.push({ path, json: JSON.parse(String(init?.body)) as Record<string, unknown> })
+        return reply(path === '/v1/memory' ? replies.current : replies.legacy)
+      })
+      const { registry, body } = await providerBody('retaindb', {
+        endpoint: 'https://api.retaindb.com', apiKey: 'retain-secret', project: 'launch', userId: 'alice',
+      })
+      const receipt = await new RetainDbProvider(registry, { fetch: fetchMock }).remember(body, { content: 'Canary before production.', importance: 3 })
+      return { receipt, sent, sessionId: `dsh-${body.id}` }
+    }
+
+    it('asks the legacy endpoint to store the memory before it answers', async () => {
+      const { sent, sessionId } = await rememberWith({ legacy: { mode: 'sync', memory: { id: 'mem-9' }, write_outcome: 'created' } })
+      expect(sent[1]).toEqual({ path: '/v1/memories', json: {
+        project: 'launch', content: 'Canary before production.', memory_type: 'factual', user_id: 'alice',
+        session_id: sessionId, importance: 0.7, async: false,
+      } })
+    })
+
+    it('reports a write the server queued anyway as queued, not stored', async () => {
+      const legacy = await rememberWith({ legacy: { success: true, mode: 'async', jobId: 'job-1', status: 'PROCESSING', statusUrl: '/v1/jobs/job-1' } })
+      expect(legacy.receipt).toEqual({ action: 'queued', provider: 'retaindb', summary: 'RetainDB queued the memory; it is not stored yet.', jobId: 'job-1' })
+      const current = await rememberWith({ current: { success: true, mode: 'async', job_id: 'job-2', status_url: '/v1/memory/jobs/job-2' } })
+      expect(current.receipt).toMatchObject({ action: 'queued', jobId: 'job-2' })
+    })
+
+    it('names the memory RetainDB Server stored, whichever endpoint answered', async () => {
+      const current = await rememberWith({ current: { mode: 'sync', memory_id: 'mem-8', memory: { id: 'mem-8' } } })
+      expect(current.receipt).toMatchObject({ action: 'stored', id: 'mem-8' })
+      const legacy = await rememberWith({ legacy: { mode: 'sync', memory: { id: 'mem-9' }, write_outcome: 'created' } })
+      expect(legacy.receipt).toMatchObject({ action: 'stored', id: 'mem-9' })
+    })
+  })
 })

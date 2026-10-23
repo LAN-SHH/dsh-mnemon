@@ -171,15 +171,23 @@ export class RetainDbProvider extends HttpMemoryProvider implements MemoryProvid
     } catch (error) {
       if (!isEndpointMissing(error)) throw error
       const { write_mode: _writeMode, ...current } = json
-      const legacy = { ...current, memory_type: memoryType(request.category, '/v1/memories') }
+      // The legacy endpoint queues a write unless `async` is false; ask it to store before it answers.
+      const legacy = { ...current, memory_type: memoryType(request.category, '/v1/memories'), async: false }
       payload = await this.request(body, '/v1/memories', { headers: this.headers(connection, '/v1/memories'), json: legacy, signal })
     }
     const result = jsonObject(payload) ?? {}
+    // A server that queued the write anyway answers with a job, not a memory: report it as queued, not stored.
+    const jobId = jsonString(result.jobId) ?? jsonString(result.job_id)
+    if (jsonString(result.mode) === 'async' || jobId !== undefined) {
+      return { action: 'queued', provider: this.id, summary: 'RetainDB queued the memory; it is not stored yet.', ...(jobId === undefined ? {} : { jobId }) }
+    }
+    // RetainDB Local answers with `id`; RetainDB Server with `memory_id`, or only the stored `memory`.
+    const id = jsonString(result.id) ?? jsonString(result.memory_id) ?? jsonString(jsonObject(result.memory)?.id)
     return {
       action: 'stored',
       provider: this.id,
       summary: 'RetainDB stored the memory synchronously.',
-      ...(jsonString(result.id) === undefined ? {} : { id: jsonString(result.id)! }),
+      ...(id === undefined ? {} : { id }),
     }
   }
 

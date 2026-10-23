@@ -57,6 +57,14 @@ describe('Read only on the Memory Spaces page (#434)', () => {
       expect(items.find(space => space.name === 'legacy')).toMatchObject({ writePolicy: 'read-only' })
       expect(items.find(space => space.name === 'fresh')).not.toHaveProperty('writePolicy')
       expect(writes).toEqual([])
+      // Save to memory on this page offers no read-only space to write to.
+      fireEvent.click(screen.getByRole('button', { name: en['nav.rememberAction'] }))
+      const remember = screen.getByRole('dialog', { name: en['remember.title'] })
+      fireEvent.click(within(remember).getByRole('button', { name: new RegExp(`^${en['remember.target']}`, 'u') }))
+      expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([expect.stringMatching(/^fresh · /u)])
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+      fireEvent.click(within(remember).getByRole('button', { name: 'Cancel' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       // And back: the saved choice is shown when the settings open again.
       fireEvent.click(screen.getByRole('button', { name: en['overview.editSpaceAria'].replace('{name}', 'legacy') }))
       const again = within(screen.getByRole('dialog')).getByRole('group', { name: en['overview.writePolicy'] })

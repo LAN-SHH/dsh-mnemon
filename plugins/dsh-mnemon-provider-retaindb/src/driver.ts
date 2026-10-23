@@ -15,7 +15,7 @@ function insight(value: unknown): Insight | undefined {
   return {
     id,
     content,
-    category: jsonString(item?.memory_type) ?? jsonString(item?.category) ?? 'general',
+    category: categoryOf(item),
     source: 'external',
     ...(score === undefined ? {} : { score }),
     ...(createdAt === undefined ? {} : { createdAt }),
@@ -78,6 +78,16 @@ const SHARED_MEMORY_TYPES: ReadonlySet<string> = new Set(['preference', 'decisio
  */
 function memoryType(category: string | undefined, endpoint: '/v1/memory' | '/v1/memories'): string {
   return endpoint === '/v1/memory' && category !== undefined && SHARED_MEMORY_TYPES.has(category) ? category : 'factual'
+}
+
+/**
+ * The Memory Spaces category of a memory RetainDB returns. Its type comes as
+ * `memory_type`, or as `type` in RetainDB Local's search results; `preference`
+ * and `decision` map back to those categories, and any other type reads as general.
+ */
+function categoryOf(item: ReturnType<typeof jsonObject>): string {
+  const type = jsonString(item?.memory_type) ?? jsonString(item?.type) ?? jsonString(item?.category)
+  return type !== undefined && SHARED_MEMORY_TYPES.has(type) ? type : 'general'
 }
 
 export class RetainDbProvider extends HttpMemoryProvider implements MemoryProviderAdapter {

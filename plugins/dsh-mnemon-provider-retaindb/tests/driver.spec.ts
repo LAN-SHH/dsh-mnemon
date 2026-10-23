@@ -241,4 +241,21 @@ describe('standalone retaindb data plane', () => {
       expect(legacy.receipt).toMatchObject({ action: 'stored', id: 'mem-9' })
     })
   })
+
+  it('reads preference and decision back from either type key, and any other type as general', async () => {
+    // RetainDB Local's search result carries the type as `type` beside the stored `memory`; its lists use `memory_type`.
+    const local = (id: string, type: string) => ({
+      id, score: 11.08, content: `Memory ${id}`, memory: { id, content: `Memory ${id}`, memory_type: type, importance: 0.86 },
+      metadata: { quality: 0.27 }, source: 'local-memory', document: 'dsh-space', type, retrieval_source: 'local_rrf', scores: { bm25: 1.1 },
+    })
+    const fetchMock = vi.fn<typeof fetch>(async url => new URL(String(url)).pathname === '/v1/memory/search'
+      ? response({ results: [local('mem-1', 'preference'), local('mem-2', 'workflow'), local('mem-3', 'decision')], count: 3 })
+      : response({ memories: [{ id: 'mem-4', content: 'Memory mem-4', memory_type: 'decision' }, { id: 'mem-5', content: 'Memory mem-5', memory_type: 'factual' }] }))
+    const { registry, body } = await providerBody('retaindb', {
+      endpoint: 'http://127.0.0.1:18990', apiKey: 'local-lab', project: 'launch', userId: 'alice',
+    })
+    const provider = new RetainDbProvider(registry, { fetch: fetchMock })
+    expect((await provider.search(body, { query: 'memory' })).results.map(row => row.category)).toEqual(['preference', 'general', 'decision'])
+    expect((await provider.list(body, {})).map(row => row.category)).toEqual(['decision', 'general'])
+  })
 })

@@ -21,7 +21,7 @@ import { openVikingView } from './views.ts'
 interface OpenVikingEnvelope {
   status?: string
   result?: unknown
-  error?: { code?: string; message?: string; trace_id?: string }
+  error?: { code?: string; message?: string; trace_id?: string; details?: { resource?: unknown } }
   trace_id?: string
 }
 

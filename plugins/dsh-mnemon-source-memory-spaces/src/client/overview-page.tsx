@@ -48,6 +48,7 @@ export function OverviewPage(props: { client: MemorySpacesPageClient; metadataCl
   const [editConnection, setEditConnection] = useState<MemoryProviderConnection>({})
   const [editClearSecrets, setEditClearSecrets] = useState<string[]>([])
   const [editWritePolicy, setEditWritePolicy] = useState<MemorySpaceWritePolicy>('writable')
+  const [confirmingReset, setConfirmingReset] = useState(false)
   const [savingSpace, setSavingSpace] = useState<string | null>(null)
   const [confirmingDeleteSpace, setConfirmingDeleteSpace] = useState<string | null>(null)
   const [deletingSpace, setDeletingSpace] = useState<string | null>(null)
@@ -207,17 +208,30 @@ export function OverviewPage(props: { client: MemorySpacesPageClient; metadataCl
         const field = descriptor.fields.find(candidate => candidate.key === key)
         return field?.input !== 'secret' || String(value) !== ''
       }))
-      const updated = await props.client.updateBody(body.id, {
+      // A changed write choice alone saves only that choice; with settings, it is for where the space then writes (#434).
+      const settingsChanged = editName !== body.name || editDescription !== (body.description ?? '') || editClearSecrets.length > 0
+        || Object.entries(connection).some(([key, value]) => body.provider.settings[key] !== value)
+      const updated = (body.writePolicy ?? 'writable') !== editWritePolicy && !settingsChanged ? body : await props.client.updateBody(body.id, {
         name: editName,
         description: editDescription,
         ...(nativeSpaceProvider(body.provider) ? {} : { connection, ...(editClearSecrets.length === 0 ? {} : { clearSecrets: editClearSecrets }) }),
       })
-      // The choice is for the namespace the space reads once its settings are saved (#434).
-      if (props.client.setWritePolicy !== undefined && (updated?.writePolicy ?? 'writable') !== editWritePolicy) await props.client.setWritePolicy(body.id, editWritePolicy)
+      if (props.client.setWritePolicy !== undefined && (updated?.writePolicy ?? 'writable') !== editWritePolicy) {
+        await props.client.setWritePolicy(body.id, editWritePolicy).catch((reason: unknown) => {
+          throw updated === body ? reason : new Error(t('overview.writePolicyNotSaved', { error: message(reason) }))
+        })
+      }
       setEditingSpace(null)
       await load(true)
       props.onMutate()
     } catch (reason) { setError(message(reason)) } finally { setSavingSpace(null) }
+  }
+
+  // An unreadable write-policy file makes every space read only; a confirmed reset makes them all writable (#434).
+  const resetWritePolicy = async () => {
+    if (!confirmingReset) { setConfirmingReset(true); return }
+    setError(null)
+    try { await props.client.resetWritePolicy?.(); setConfirmingReset(false); await load(true); props.onMutate() } catch (reason) { setError(message(reason)) }
   }
 
   const create = async (event: FormEvent) => {
@@ -360,11 +374,11 @@ export function OverviewPage(props: { client: MemorySpacesPageClient; metadataCl
   const spaceEditForm = (body: MemorySpaceView) => <form id={spaceEditFormId} className={css.bodyEdit} onSubmit={event => void saveEdit(event, body)}>
     <label>{t('overview.editName')}<input aria-label={t('overview.editName')} value={editName} onChange={event => setEditName(event.target.value)} maxLength={MEMORY_SPACE_NAME_MAX_LENGTH} required /></label>
     <label>{t('overview.editDescription')}<textarea aria-label={t('overview.editDescription')} value={editDescription} onChange={event => setEditDescription(event.target.value)} rows={4} maxLength={MEMORY_SPACE_DESCRIPTION_MAX_LENGTH} /></label>
+    {!nativeSpaceProvider(body.provider) && (() => { const descriptor = providers.find(provider => provider.id === body.provider.id); return descriptor === undefined ? null : <ProviderMemoryFields provider={descriptor} connection={editConnection} onChange={(key, value) => setEditConnection(current => ({ ...current, [key]: value }))} body={body} clearSecrets={editClearSecrets} onClearSecretsChange={setEditClearSecrets} /> })()}
     {props.client.setWritePolicy !== undefined && (body.provider.capabilities.remember || body.writePolicy === 'read-only') && <fieldset className={css.writePolicy}><legend>{t('overview.writePolicy')}</legend>
       <label data-selected={editWritePolicy === 'writable' || undefined}><input type="radio" name="memory-space-write-policy" value="writable" checked={editWritePolicy === 'writable'} onChange={() => setEditWritePolicy('writable')} /><i className={css.choiceControl} data-kind="radio" aria-hidden="true" /><span><strong>{t('overview.writable')}</strong><small>{t('overview.writableHint')}</small></span></label>
       <label data-selected={editWritePolicy === 'read-only' || undefined}><input type="radio" name="memory-space-write-policy" value="read-only" checked={editWritePolicy === 'read-only'} onChange={() => setEditWritePolicy('read-only')} /><i className={css.choiceControl} data-kind="radio" aria-hidden="true" /><span><strong>{t('common.readOnlySpace')}</strong><small>{t('overview.readOnlyHint')}</small></span></label>
     </fieldset>}
-    {!nativeSpaceProvider(body.provider) && (() => { const descriptor = providers.find(provider => provider.id === body.provider.id); return descriptor === undefined ? null : <ProviderMemoryFields provider={descriptor} connection={editConnection} onChange={(key, value) => setEditConnection(current => ({ ...current, [key]: value }))} body={body} clearSecrets={editClearSecrets} onClearSecretsChange={setEditClearSecrets} /> })()}
   </form>
   const spaceCreateForm = <form id={spaceCreateFormId} className={appearanceClass(css.bodyEdit, css.bodyCreateForm)} onSubmit={event => void create(event)}>
     <section className={css.createSection}>
@@ -397,6 +411,8 @@ export function OverviewPage(props: { client: MemorySpacesPageClient; metadataCl
       <PageHeader title={t('nav.overview')} description={t(('overview.pageDescription'))} meta={fullSyncAge} {...(loading ? { loadingLabel: catalogLoading ? t('overview.directoryLoading') : graphLoading ? t('overview.snapshotLoading') : t('overview.healthLoading') } : {})}
  />
       {error !== null && <div className={css.inlineError} role="alert">{error}</div>}
+      {catalog?.writePolicyProblem !== undefined && <div className={css.inlineError} role="alert">{t('overview.writePolicyProblem', { error: catalog.writePolicyProblem })}{props.writeEnabled && props.client.resetWritePolicy !== undefined
+        && <> <button type="button" className={spaceEditActionClass} onClick={() => void resetWritePolicy()}>{t(confirmingReset ? 'overview.writePolicyResetConfirm' : 'overview.writePolicyReset')}</button></>}</div>}
       <section className={css.bodyDirectory} aria-label={t('overview.directory')}>
         <div className={css.bodyDirectoryHeader}>
           <div><h3>{t('overview.directory')}</h3><p>{t('overview.directory.description')}</p>{catalogUnavailable && <code className={css.bodyDirectoryPath}>{t('overview.directory.unsynced')}</code>}</div>

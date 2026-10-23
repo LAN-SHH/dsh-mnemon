@@ -463,6 +463,7 @@ export class MemorySpacesService {
       : providerCatalog === EMPTY_MEMORY_PROVIDER_CATALOG ? memorySpaces : memorySpaces.withProviderCatalog(providerCatalog)
     this.recallQualityPolicy = recallQualityPolicyRegistry.resolve(config.recallQuality.policy)
     this.providers = providerAdapterRegistry.create({ memorySpaces: this.memorySpaces, memoryBodies: this.memorySpaces, config: this.config, nativeRunner: this.runner })
+    this.memorySpaces.useNamespaceKeys((providerId, connection) => this.providers.get(providerId)?.namespaceKey?.(connection))
   }
 
   /** Release clients owned by one composable Memory Spaces generation. */
@@ -541,6 +542,7 @@ export class MemorySpacesService {
       directory: this.memorySpaces.directory,
       generatedAt: new Date().toISOString(),
       rediscovery: this.rediscoveryState(),
+      ...(this.memorySpaces.writePolicyProblem() === undefined ? {} : { writePolicyProblem: this.memorySpaces.writePolicyProblem()! }),
     }
   }
 
@@ -701,6 +703,7 @@ export class MemorySpacesService {
     let stopped: MnemonEmbeddingFill['stopped']
     while (last.embedded < last.totalInsights) {
       if (Date.now() + step > deadline) { stopped = 'time'; break }
+      this.assertSpaceWritable(body, 'no more vectors were filled in', ' Make it writable first to fill them in.')
       try {
         await this.runner.runText(['embed', '--all'], { ...options, timeoutMs: step })
       } catch (error) {
@@ -1558,6 +1561,12 @@ export class MemorySpacesService {
     return this.memorySpaces.setWritePolicy(id, policy)
   }
 
+  /** A person's confirmed recovery: every space takes writes again, an unreadable policy file included. */
+  resetWritePolicy(): MemorySpaceCatalog {
+    this.memorySpaces.resetWritePolicy()
+    return this.spaceDirectory()
+  }
+
   updateSpaceMetadata(updates: readonly MemorySpaceMetadataUpdate[]): MemorySpace[] {
     this.assertWritable()
     return this.memorySpaces.updateMetadata(updates)
@@ -1620,6 +1629,8 @@ export class MemorySpacesService {
     const draftPath = join(temporary, 'memory-draft.json')
     try {
       writeFileSync(draftPath, JSON.stringify({ schema_version: '1', source: 'dsh-mnemon-merge', insights, edges }), { encoding: 'utf8', mode: 0o600 })
+      // The policy may have changed while the sources were read (#434).
+      this.assertSpaceWritable(target)
       const result = await this.runner.runJson(['import', draftPath], { ...(signal === undefined ? {} : { signal }), store: target.id })
       const summary = record(result)
       const counts = [summary?.imported, summary?.updated, summary?.skipped]
@@ -1688,6 +1699,8 @@ export class MemorySpacesService {
       this.assertSpaceWritable(body)
       return body
     }
+    const problem = this.memorySpaces.writePolicyProblem()
+    if (problem !== undefined) throw new Error(`${problem}. Until then no Memory Space takes writes, so nothing was written.`)
     const active = this.memorySpaces.active()
     const writable = active.filter(body => body.writePolicy !== 'read-only')
     if (writable.length === active.length) {
@@ -1742,7 +1755,8 @@ export class MemorySpacesService {
       memoryBodyName: body.name,
       memoryProviderId: body.provider.id,
       memoryProviderLabel: body.provider.label,
-      memoryCapabilities: body.provider.capabilities,
+      // A read-only space takes no write, whatever its Provider can do (#434).
+      memoryCapabilities: body.writePolicy === 'read-only' ? { ...body.provider.capabilities, remember: false, link: false, forget: false } : body.provider.capabilities,
     }
   }
 

@@ -80,7 +80,7 @@ follow an exact cold reference when full text is required
 `state/` 下的文件：
 
 - `memory-providers.json` 保存第三方 endpoint、目标 URI、身份和可选凭据；文件权限为 `0600`，Host 只返回已配置字段名，不回传凭据值。
-- `memory-provider-write-policy.json` 列出设为[只读](../guides/memory-providers.md#只读空间)的命名空间：每项按标识它的设置记录（从不含凭据），Mnemon Native Store 则按其 id 记录。只有存在只读空间时才有这个文件。文件无法读取时，所有空间都按只读处理，直到修复或删除该文件；召回不受影响。
+- `memory-provider-write-policy.json` 列出设为[只读](../guides/memory-providers.md#只读空间)的落点：每项由 Provider 类型、其服务以及 Provider 在其中指明的位置（例如 bank 或目录）组成，从不含凭据。只有存在只读落点时才有这个文件，最多记录 1,000 个。文件或其中的条目无法读取时，所有空间都按只读处理，直到修复文件或在记忆空间页面重置写入选择；召回不受影响。
 - `sync-git.json` 保存 Git 同步配置：仓库地址、分支、远端目录、提交身份、自动同步间隔（分钟，`autoBackupMinutes`，`0` 为关闭），以及供 HTTPS 远端使用的可选令牌。它遵循同样的 `0600` 权限与脱敏规则，既不属于 Config，也不进入 Mnemon Pack。
 - `sync/git` 下的镜像是同步分支的可丢弃 Git 工作树：push 与 pull 都在其中工作，存储根本身永远不会成为 Git 工作树；删除镜像只多一次 fetch，不会丢数据。镜像在自己的 Git 配置里记录它取自哪个仓库（`mnemon.origin`），换成另一个仓库时会重建，因此一个仓库的历史不会进入另一个仓库。
 - `sync/last-run.json` 记录上一次同步或合并完成的时间，重启后页面仍能说明。

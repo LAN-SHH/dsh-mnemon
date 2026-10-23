@@ -132,11 +132,12 @@ server v0.4.21.
 | Provider | Routes | Data plane |
 |---|---|---|
 | OpenViking | `viking_search`, `viking_read`, `viking_browse`, `viking_remember`, `viking_forget`, `viking_add_resource`, plus `viking_grep` | Bridged vendor plugin; Mnemon's adapter as fallback |
-| Mem0 | `mem0_search`, `mem0_add`, `mem0_update`, `mem0_delete` | Bridge candidate for search and add; the adapter for update and delete |
+| Mem0 | `mem0_search`, `mem0_add`, `mem0_update`, `mem0_delete` | Bridged `@mem0/deepseek-plugin` for search and add (Mem0 Platform only), the adapter for update, delete and self-hosted Mem0 |
 | Honcho | `honcho_profile`, `honcho_search`, `honcho_context`, `honcho_reasoning`, `honcho_conclude` | Adapter: the vendor plugin's peers stop at DSH 0.2.0-rc.1 |
-| Hindsight | `hindsight_retain`, `hindsight_recall`, `hindsight_reflect` | Adapter |
+| Hindsight | the vendor's own tool names, already the familiar ones | Bridged `@vectorize-io/hindsight-coding-agents`, with its tools-only settings in its own configuration file; the adapter otherwise |
 | Holographic | `fact_store`, `fact_feedback` | Adapter |
-| RetainDB, ByteRover, Supermemory | the names their integrations use | Adapter |
+| agentmemory (#168) | `memory_recall`, `memory_smart_search`, `memory_save`, `memory_forget` | Bridged official MCP connection (`agentmemory connect dsh`); writes refused while its server is unreachable |
+| RetainDB, ByteRover, Supermemory | the names their integrations use | Adapter: no official DSH integration |
 | Mnemon Native | today's recall, related, link and graph verbs | Native CLI |
 
 ### Bridged Providers
@@ -320,7 +321,8 @@ Exceeding any of these by half means stopping to ask.
 
 ## Stop and ask
 
-- Hiding or shadowing needs a DSH change, or does not work on DSH 0.2.0-rc.2.
+- Hiding or shadowing needs a DSH change, or does not work on DSH 0.2.0-rc.2 or on npm `next` (0.2.1-rc.3 since 2026-10-23).
+- A vendor plugin's fixed prompt cost exceeds the per-Provider budget and cannot be turned off (Hindsight's tool guide measured about 7 KB).
 - A vendor plugin cannot be held to tools only, because its automation cannot be turned off.
 - Recall blocks lose accuracy against today's federated recall (non-inferiority −2 points).
 - Bridged turns cost more than 1.25× the adapter's on the same questions.
@@ -348,8 +350,11 @@ Exceeding any of these by half means stopping to ask.
 4. **Automation enhancements:** overview, prefetch, sync, mirror and Provider Changes. Gate: each is
    off by default, per-turn cost stays within its bound, and extraction-driven rewrites are shown
    and can be undone.
-5. **More bridges.** Mem0 comes next, then Honcho once its plugin accepts current DSH releases. Each
-   has its own gate from step 1.
+5. **More bridges.** Each has its own gate from step 1:
+   - Mem0, with automatic recall and capture off: its plugin cannot skip subagent sessions.
+   - Hindsight, whose tools-only settings live in its shared configuration file.
+   - agentmemory (#168), with a write gate on its server probe.
+   - Honcho once its plugin installs on current DSH releases: today both supported hosts refuse it.
 
 ## Progress
 
@@ -363,7 +368,8 @@ Exceeding any of these by half means stopping to ask.
 - [ ] 2. Provider slot and recall blocks
 - [ ] 3. Setup, status and migration
 - [ ] 4. Automation enhancements
-- [ ] 5. Mem0 bridge
+- [x] Survey: the official DSH integrations of Mem0, Hindsight, Honcho and agentmemory
+- [ ] 5. Mem0, Hindsight and agentmemory bridges; Honcho stays on the adapter until its plugin installs
 
 ## Evidence
 
@@ -383,3 +389,15 @@ With the vendor plugin's defaults, which recall and capture automatically:
 - every short session was committed for extraction, task Agents included.
 
 The tools-only configuration, with subagent sessions skipped, captured nothing.
+
+A second lab the same day installed the official integrations of Mem0, Hindsight and agentmemory beside
+dsh-mnemon, on DSH 0.2.1-rc.2 and 0.2.0-rc.2.
+
+- **The mechanisms held for all three.** Calls through `ctx.tools.execute`, per-Agent hiding re-applied on
+  `tools/change`, and hiding in task Agents all worked on both hosts.
+- **The cost fell.** With all three on their defaults, a request carried 62 tools in 48,529 bytes. Bridged,
+  it carried 55 tools in 43,797 bytes, and one step's input fell from 15,096 to 13,982 tokens.
+- **Defaults to switch off.** Mem0's automatic capture stored task Agent sessions, including internal
+  orchestration instructions, in the user's Mem0. agentmemory accepts writes into memory while its server
+  is down, and those writes are lost on exit.
+- **Honcho could not be tested.** Its plugin does not install on either supported host.

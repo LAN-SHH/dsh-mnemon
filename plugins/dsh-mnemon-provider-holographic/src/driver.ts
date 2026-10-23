@@ -23,6 +23,8 @@ interface HolographicFact {
   tags: string[]
   entities: string[]
   trustScore: number
+  /** The writer's 1..5 importance. Facts written before #447 have none. */
+  importance?: number
   createdAt: string
   updatedAt: string
 }
@@ -39,6 +41,28 @@ const CAPITALIZED = /\b([A-Z][\p{L}\p{N}_-]+(?:\s+[A-Z][\p{L}\p{N}_-]+)*)\b/gu
 
 function clampTrust(value: number): number {
   return Math.min(1, Math.max(0, value))
+}
+
+/** How far one importance step moves a fact's trust from the space's default. */
+const TRUST_PER_IMPORTANCE_STEP = 0.1
+
+/** The 1..5 importance a request carries, if any. */
+function importanceLevel(value: unknown): number | undefined {
+  const level = Number(value)
+  return value === undefined || value === null || !Number.isFinite(level) ? undefined : Math.min(5, Math.max(1, Math.round(level)))
+}
+
+/**
+ * The trust a new fact starts with (#447). Importance 3, which the Memory Spaces Source sends when
+ * a writer gives none, starts at the space's default trust; each step above or below moves it by
+ * 0.1, within 0..1. Before, the 1..5 importance was clamped as if it were a trust, so every fact
+ * started at 1.0 and neither the default nor the minimum trust took effect.
+ */
+function initialTrust(importance: number | undefined, defaultTrust: unknown): number {
+  const configured = Number(defaultTrust ?? 0.5)
+  const base = Number.isFinite(configured) ? clampTrust(configured) : 0.5
+  const steps = importance === undefined ? 0 : importance - 3
+  return Math.round(clampTrust(base + steps * TRUST_PER_IMPORTANCE_STEP) * 100) / 100
 }
 
 function terms(value: string): Set<string> {
@@ -71,7 +95,8 @@ function insight(fact: HolographicFact, score?: number): Insight {
     id: fact.id,
     content: fact.content,
     category: fact.category,
-    importance: fact.trustScore,
+    // Importance is on the 1..5 scale every Provider reports; trust is a separate 0..1 value.
+    ...(fact.importance === undefined ? {} : { importance: fact.importance }),
     tags: fact.tags,
     entities: fact.entities,
     source: 'external',
@@ -124,7 +149,9 @@ export class HolographicProvider implements MemoryProviderAdapter {
       const phrase = fact.content.toLocaleLowerCase().includes(query) ? 1 : 0
       const entity = fact.entities.some(value => query.includes(value.toLocaleLowerCase())) ? 1 : 0
       const relevance = Math.max(lexical, phrase * 0.9, entity * 0.8)
-      return relevance <= 0 ? [] : [{ fact, score: relevance * fact.trustScore }]
+      // Trust decides what is recalled (minTrust above); it does not scale the score, which stays the
+      // 0..1 relevance Memory Spaces' recall tiers read. Every fact used to carry trust 1.0 (#447).
+      return relevance <= 0 ? [] : [{ fact, score: relevance }]
     }), limit)
     return { results: results.map(result => insight(result.fact, result.score)) }
   }
@@ -174,7 +201,7 @@ export class HolographicProvider implements MemoryProviderAdapter {
     return topScored(store.facts.flatMap(fact => {
       if (fact.id === id) return []
       const sharedEntities = fact.entities.filter(value => sourceEntities.has(value.toLocaleLowerCase())).length
-      const score = Math.max(sharedEntities === 0 ? 0 : Math.min(1, 0.5 + sharedEntities * 0.2), overlap(sourceTerms, terms(fact.content))) * fact.trustScore
+      const score = Math.max(sharedEntities === 0 ? 0 : Math.min(1, 0.5 + sharedEntities * 0.2), overlap(sourceTerms, terms(fact.content)))
       return score <= 0 ? [] : [{ fact, score }]
     }), 20).map(result => insight(result.fact, result.score))
   }
@@ -185,13 +212,15 @@ export class HolographicProvider implements MemoryProviderAdapter {
     if (existing !== undefined) return { action: 'skipped', provider: this.id, id: existing.id, summary: 'Holographic already contains this fact.' }
     const now = new Date().toISOString()
     const connection = this.connection(body)
+    const importance = importanceLevel(request.importance)
     const fact: HolographicFact = {
       id: `holo-${randomUUID()}`,
       content: request.content.trim(),
       category: request.category ?? 'general',
       tags: [...new Set(request.tags ?? [])],
       entities: extractEntities(request.content, request.entities),
-      trustScore: clampTrust(Number(request.importance ?? connection.defaultTrust ?? 0.5)),
+      trustScore: initialTrust(importance, connection.defaultTrust),
+      ...(importance === undefined ? {} : { importance }),
       createdAt: now,
       updatedAt: now,
     }

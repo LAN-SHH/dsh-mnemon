@@ -241,11 +241,11 @@ export class OpenVikingProvider implements MemoryProviderAdapter {
   private integration(body: MemorySpace): { integration?: MemorySpaceIntegration } {
     const snapshot = this.officialPlugin?.()
     if (snapshot === undefined) return {}
-    let connection: OpenVikingConnection
-    try { connection = this.connection(body) } catch { return {} }
-    const owner = /^viking:\/\/user\/([^/]+)\/memories\/?$/u.exec(connection.targetUri.trim())?.[1]
-    const user = connection.discoveryUser?.trim() || owner || connection.user?.trim() || ''
-    return { integration: officialPluginIntegration(snapshot, { endpoint: connection.endpoint, account: connection.account ?? '', user }) }
+    let key: readonly string[]
+    try { key = this.namespaceKey({ ...this.connection(body) }) } catch { return {} }
+    // Where this space's writes land, as the write policy keys them: server, account and memory root.
+    const user = /^viking:\/\/user\/([^/]+)\/memories$/u.exec(key[2] ?? '')?.[1] ?? ''
+    return { integration: officialPluginIntegration(snapshot, { endpoint: key[0] ?? '', account: key[1] ?? '', user }) }
   }
 
   /** The hierarchy, Resources and server changes of this space's OpenViking namespace, read only. */

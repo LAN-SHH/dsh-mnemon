@@ -1,4 +1,4 @@
-import type { MemorySpaceIntegration } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
+import { endpointKey, type MemorySpaceIntegration } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 
 /** OpenViking's own DeepSeek Harness plugin, and the service its runtime provides in the profile. */
 export const OFFICIAL_PLUGIN_PACKAGE = '@openviking/dsh-memory-plugin'
@@ -38,24 +38,19 @@ export function readOfficialPlugin(lookup: () => unknown): OfficialPluginSnapsho
   return snapshot
 }
 
-function origin(url: string | undefined): string | undefined {
-  if (url === undefined || url.trim() === '') return undefined
-  try {
-    const parsed = new URL(url.trim())
-    return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/u, '')}`.toLowerCase()
-  } catch {
-    return undefined
-  }
+function endpoint(url: string | undefined): string | undefined {
+  return url === undefined || url.trim() === '' ? undefined : endpointKey(url)
 }
 
 /**
- * The official plugin as one space shows it. It shares the space's namespace when it talks to the
- * same server as the same account and user; when either side leaves one of them to the server,
- * that cannot be told and nothing is claimed.
+ * The official plugin as one space shows it. It shares the space's namespace when it writes where
+ * the space's writes land, the way the write policy keys them (#434): the same server, account and
+ * user's memory root. When either side leaves one of them to the server, that cannot be told and
+ * nothing is claimed.
  */
 export function officialPluginIntegration(snapshot: OfficialPluginSnapshot, space: { endpoint: string; account: string; user: string }): MemorySpaceIntegration {
   const pairs: Array<[string | undefined, string | undefined]> = [
-    [origin(snapshot.endpoint), origin(space.endpoint)],
+    [endpoint(snapshot.endpoint), endpoint(space.endpoint)],
     [snapshot.account, space.account.trim() || undefined],
     [snapshot.user, space.user.trim() || undefined],
   ]

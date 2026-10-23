@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMemorySpaceProviderFixture } from 'dsh-mnemon-source-memory-spaces/testing'
-import type { MemoryProviderConnection, MemoryProviderId } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
+import type { Category, MemoryProviderConnection, MemoryProviderId } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 import { RetainDbProvider, descriptor } from '../src/index.ts'
 
 const temporaryDirectories: string[] = []
@@ -162,6 +162,41 @@ describe('standalone retaindb data plane', () => {
     it('sends the same importance to the legacy endpoint', async () => {
       const { sent } = await remember(5, { currentMissing: true })
       expect(sent.map(request => [request.path, request.json.importance])).toEqual([['/v1/memory', 0.9], ['/v1/memories', 0.9]])
+    })
+  })
+
+  describe('memory types RetainDB Server accepts', () => {
+    // RetainDB Server answers a memory_type outside its list with HTTP 400. POST /v1/memory takes preference and
+    // decision but not fact, insight, context or general; the legacy POST /v1/memories takes only factual, episodic,
+    // semantic and procedural. The Source always sends a category, general by default.
+    async function sentTypes(category: Category | undefined) {
+      const sent: Array<[string, unknown]> = []
+      const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+        const path = new URL(String(url)).pathname
+        sent.push([path, (JSON.parse(String(init?.body)) as Record<string, unknown>).memory_type])
+        return path === '/v1/memory' ? response({ message: 'missing' }, 404) : response({ id: 'ret-8' })
+      })
+      const { registry, body } = await providerBody('retaindb', {
+        endpoint: 'https://api.retaindb.com', apiKey: 'retain-secret', project: 'launch', userId: 'alice',
+      })
+      await new RetainDbProvider(registry, { fetch: fetchMock })
+        .remember(body, { content: 'Canary before production.', importance: 3, ...(category === undefined ? {} : { category }) })
+      return sent
+    }
+
+    it.each([
+      ['preference', 'preference'],
+      ['decision', 'decision'],
+      ['fact', 'factual'],
+      ['insight', 'factual'],
+      ['context', 'factual'],
+      ['general', 'factual'],
+    ] as const)('sends category %s as %s, and as factual to the legacy endpoint', async (category, type) => {
+      expect(await sentTypes(category)).toEqual([['/v1/memory', type], ['/v1/memories', 'factual']])
+    })
+
+    it('sends factual on both endpoints when the request carries no category', async () => {
+      expect(await sentTypes(undefined)).toEqual([['/v1/memory', 'factual'], ['/v1/memories', 'factual']])
     })
   })
 })

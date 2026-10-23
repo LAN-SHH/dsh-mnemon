@@ -64,6 +64,22 @@ function retainDbImportance(importance: unknown): number {
   return Math.round((IMPORTANCE_AT_DEFAULT + steps * IMPORTANCE_PER_STEP) * 100) / 100
 }
 
+/** The Memory Spaces categories RetainDB Server's POST /v1/memory takes under the same name. */
+const SHARED_MEMORY_TYPES: ReadonlySet<string> = new Set(['preference', 'decision'])
+
+/**
+ * RetainDB's memory type for a Memory Spaces category. RetainDB Server answers a
+ * type outside its list with HTTP 400. POST /v1/memory takes `preference` and
+ * `decision`, but neither `fact`, `insight`, `context` nor `general`; those are sent
+ * as `factual`, the type RetainDB itself falls back to. The legacy POST /v1/memories
+ * takes only factual, episodic, semantic and procedural, so it gets `factual` for
+ * every category. RetainDB Local takes any type and infers its own from the text;
+ * where it finds none, it already fell back to `factual` for those four.
+ */
+function memoryType(category: string | undefined, endpoint: '/v1/memory' | '/v1/memories'): string {
+  return endpoint === '/v1/memory' && category !== undefined && SHARED_MEMORY_TYPES.has(category) ? category : 'factual'
+}
+
 export class RetainDbProvider extends HttpMemoryProvider implements MemoryProviderAdapter {
   readonly id = 'retaindb' as const
   readonly scoreSemantics = NORMALIZED_RELEVANCE_SCORE
@@ -143,7 +159,7 @@ export class RetainDbProvider extends HttpMemoryProvider implements MemoryProvid
     const json = {
       project: String(connection.project),
       content: request.content,
-      memory_type: request.category ?? 'factual',
+      memory_type: memoryType(request.category, '/v1/memory'),
       user_id: String(connection.userId) === '*' ? 'dsh-user' : String(connection.userId),
       session_id: `dsh-${body.id}`,
       importance: retainDbImportance(request.importance),
@@ -154,7 +170,8 @@ export class RetainDbProvider extends HttpMemoryProvider implements MemoryProvid
       payload = await this.request(body, '/v1/memory', { headers: this.headers(connection, '/v1/memory'), json, signal })
     } catch (error) {
       if (!isEndpointMissing(error)) throw error
-      const { write_mode: _writeMode, ...legacy } = json
+      const { write_mode: _writeMode, ...current } = json
+      const legacy = { ...current, memory_type: memoryType(request.category, '/v1/memories') }
       payload = await this.request(body, '/v1/memories', { headers: this.headers(connection, '/v1/memories'), json: legacy, signal })
     }
     const result = jsonObject(payload) ?? {}

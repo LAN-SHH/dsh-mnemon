@@ -1,0 +1,166 @@
+{
+  "record": "retaindb-importance-scale",
+  "date": "2026-10-23",
+  "baseline": "main a7e3bc54",
+  "environment": {
+    "os": "macOS 15.6 arm64 (Darwin 24.6.0)",
+    "node": "24.19.0",
+    "pnpm": "10.13.1"
+  },
+  "server": "none run: there was no account for the hosted RetainDB service, and RetainDB Local was read from its source, not started. The evidence is RetainDB's contract plus request-level checks.",
+  "contract": {
+    "hermesAgent": {
+      "source": "https://github.com/NousResearch/hermes-agent/blob/419e6627aaeda9c87e0b17bcc013484a2bfdb194/plugins/memory/retaindb/__init__.py",
+      "endpoint": "line 32: default base URL https://api.retaindb.com",
+      "toolSchema": "line 78: retaindb_remember importance, type number, \"Importance 0-1 (default: 0.7).\"",
+      "client": "lines 148-152: add_memory(..., importance: float = 0.7) puts importance in the POST /v1/memory body (with write_mode \"sync\"), and in the POST /v1/memories body on fallback",
+      "handler": "line 481: importance=float(a.get(\"importance\", 0.7))"
+    },
+    "retainDbLocal": {
+      "source": "https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/local/src/cli.ts",
+      "package": "@retaindb/local 0.2.2 (Apache-2.0)",
+      "route": "lines 1738-1740: POST /v1/memory stores the body through runtime.addMemory",
+      "stored": "line 728: importance = clamp((input.importance ?? 0.62) + quality * 0.28 + (MEMORY_TYPE_WEIGHT[type] || 0.3) * 0.12, 0.1, 0.99); quality is within 0..1 (line 160) and every type weight is positive (lines 73-89); clamp is line 145",
+      "recall": "line 904: each recall score adds the memory's importance",
+      "consequence": "any importance of 1 or more is stored at 0.99, so on main RetainDB Local stored every memory at its highest importance"
+    },
+    "hostedServiceAboveOne": "not observed: whether the hosted service clamps or refuses a value above 1"
+  },
+  "memorySpacesSource": {
+    "prepareRemember": "plugins/dsh-mnemon-source-memory-spaces/src/service.ts: importance = integer(request.importance, 3, 1, 5), for remember and rememberMany",
+    "integer": "src/sdk/input.ts: an absent value becomes the fallback 3; anything but an integer within 1..5 is refused"
+  },
+  "mapping": {
+    "rule": "no importance: 0.7; otherwise clamp(0.7 + (importance - 3) * 0.1, 0, 1), rounded to 2 decimals",
+    "importance 1..5": [
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "no importance": 0.7,
+    "legacyFallback": "POST /v1/memories carries the same importance: it is the same body without write_mode",
+    "readBack": "search and list read id, content, score or similarity, memory_type or category, and created_at; no importance is read back, so nothing maps back",
+    "existingMemories": "not rewritten; on RetainDB Local they keep the stored 0.99, which recall still adds to their scores, and the importance they were written with is not kept there"
+  },
+  "probe": {
+    "script": "importance.probe.mjs",
+    "path": "MemoryCompositionRunner with the real Memory Spaces Source and the RetainDB Provider; provider-service-update discovers one project on a loopback recorder, then three remember calls into that space",
+    "writes": [
+      {
+        "content": "Release notes are drafted on Monday",
+        "importance": 1
+      },
+      {
+        "content": "Release approvals need a completed canary",
+        "importance": 5
+      },
+      {
+        "content": "Release branches are cut from main",
+        "importance": null
+      }
+    ],
+    "main": {
+      "requests": [
+        "GET /v1/projects",
+        "GET /v1/memories",
+        "POST /v1/memory",
+        "POST /v1/memory",
+        "POST /v1/memory"
+      ],
+      "sent": [
+        {
+          "project": "launch",
+          "content": "Release notes are drafted on Monday",
+          "memory_type": "general",
+          "user_id": "dsh-user",
+          "session_id": "dsh-retaindb-a33e35d302125bbd8e647043",
+          "importance": 1,
+          "write_mode": "sync"
+        },
+        {
+          "project": "launch",
+          "content": "Release approvals need a completed canary",
+          "memory_type": "general",
+          "user_id": "dsh-user",
+          "session_id": "dsh-retaindb-a33e35d302125bbd8e647043",
+          "importance": 5,
+          "write_mode": "sync"
+        },
+        {
+          "project": "launch",
+          "content": "Release branches are cut from main",
+          "memory_type": "general",
+          "user_id": "dsh-user",
+          "session_id": "dsh-retaindb-a33e35d302125bbd8e647043",
+          "importance": 3,
+          "write_mode": "sync"
+        }
+      ]
+    },
+    "fix": {
+      "requests": [
+        "GET /v1/projects",
+        "GET /v1/memories",
+        "POST /v1/memory",
+        "POST /v1/memory",
+        "POST /v1/memory"
+      ],
+      "sent": [
+        {
+          "project": "launch",
+          "content": "Release notes are drafted on Monday",
+          "memory_type": "general",
+          "user_id": "dsh-user",
+          "session_id": "dsh-retaindb-a33e35d302125bbd8e647043",
+          "importance": 0.5,
+          "write_mode": "sync"
+        },
+        {
+          "project": "launch",
+          "content": "Release approvals need a completed canary",
+          "memory_type": "general",
+          "user_id": "dsh-user",
+          "session_id": "dsh-retaindb-a33e35d302125bbd8e647043",
+          "importance": 0.9,
+          "write_mode": "sync"
+        },
+        {
+          "project": "launch",
+          "content": "Release branches are cut from main",
+          "memory_type": "general",
+          "user_id": "dsh-user",
+          "session_id": "dsh-retaindb-a33e35d302125bbd8e647043",
+          "importance": 0.7,
+          "write_mode": "sync"
+        }
+      ]
+    }
+  },
+  "unitTests": {
+    "retaindb": {
+      "main": "7 failed, 8 passed",
+      "fix": "15 passed",
+      "mainRun": "the new tests against main's driver.ts",
+      "failingOnMain": [
+        "sends importance 1 as 0.5",
+        "sends importance 2 as 0.6",
+        "sends importance 3 as 0.7",
+        "sends importance 4 as 0.8",
+        "sends importance 5 as 0.9",
+        "keeps an importance outside 1..5 within 0..1",
+        "sends the same importance to the legacy endpoint"
+      ],
+      "passingOnMain": {
+        "sends RetainDB's default 0.7 when the request carries no importance": "main also sent 0.7 when no importance reached the Provider; through the Source one always does"
+      }
+    }
+  },
+  "otherChecks": {
+    "dsh-mnemon-provider-retaindb typecheck": "pass",
+    "dsh-mnemon-provider-retaindb build": "pass",
+    "dsh-mnemon-source-memory-spaces tests": "296 passed, 2 skipped",
+    "node scripts/verify-docs.mjs": "pass"
+  }
+}

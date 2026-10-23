@@ -34,6 +34,26 @@ function isEndpointMissing(error: unknown): boolean {
   return error instanceof Error && /HTTP 404\b/u.test(error.message)
 }
 
+/** RetainDB's own importance default, on its 0..1 scale. */
+const RETAINDB_DEFAULT_IMPORTANCE = 0.7
+
+/** How far one step of the Source's 1..5 importance moves RetainDB's importance. */
+const IMPORTANCE_PER_STEP = 0.1
+
+/**
+ * The importance RetainDB takes, from 0 to 1 with a default of 0.7, for the
+ * integer 1..5 the Memory Spaces Source sends (3 when the writer gives none).
+ * Importance 3 maps to RetainDB's default and each step above or below moves it
+ * by 0.1, within 0..1, so 1..5 become 0.5..0.9. A request without an importance
+ * gets the default. The 1..5 value used to be sent as is, outside that scale.
+ */
+function retainDbImportance(importance: number | undefined): number {
+  const steps = importance === undefined ? 0 : importance - 3
+  const mapped = Math.min(1, Math.max(0, RETAINDB_DEFAULT_IMPORTANCE + steps * IMPORTANCE_PER_STEP))
+  // Two decimals, so 1 is sent as 0.5 rather than 0.49999999999999994.
+  return Math.round(mapped * 100) / 100
+}
+
 export class RetainDbProvider extends HttpMemoryProvider implements MemoryProviderAdapter {
   readonly id = 'retaindb' as const
   readonly scoreSemantics = NORMALIZED_RELEVANCE_SCORE
@@ -116,7 +136,7 @@ export class RetainDbProvider extends HttpMemoryProvider implements MemoryProvid
       memory_type: request.category ?? 'factual',
       user_id: String(connection.userId) === '*' ? 'dsh-user' : String(connection.userId),
       session_id: `dsh-${body.id}`,
-      importance: request.importance ?? 0.7,
+      importance: retainDbImportance(request.importance),
       write_mode: 'sync',
     } as const
     let payload: unknown

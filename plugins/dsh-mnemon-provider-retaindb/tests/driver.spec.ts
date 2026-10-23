@@ -116,4 +116,46 @@ describe('standalone retaindb data plane', () => {
     expect(new Headers(requests[0]?.init?.headers).get('X-API-Key')).toBe('retain-secret')
     expect(requests.map(request => new URL(request.url).pathname)).toContain('/v1/memories/ret-1')
   })
+
+  describe('importance on RetainDB\'s 0..1 scale', () => {
+    // The Memory Spaces Source sends every Provider an integer importance from 1 to 5, and 3 when the
+    // writer gives none. RetainDB takes an importance from 0 to 1, with 0.7 as its default.
+    async function remember(importance: number | undefined, { currentMissing = false } = {}) {
+      const sent: Array<{ path: string; json: Record<string, unknown> }> = []
+      const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+        const path = new URL(String(url)).pathname
+        sent.push({ path, json: JSON.parse(String(init?.body)) as Record<string, unknown> })
+        return currentMissing && path === '/v1/memory' ? response({ message: 'missing' }, 404) : response({ id: 'ret-7' })
+      })
+      const { registry, body } = await providerBody('retaindb', {
+        endpoint: 'https://api.retaindb.com', apiKey: 'retain-secret', project: 'launch', userId: 'alice',
+      })
+      await new RetainDbProvider(registry, { fetch: fetchMock })
+        .remember(body, { content: 'Canary before production.', category: 'decision', ...(importance === undefined ? {} : { importance }) })
+      return { sent, sessionId: `dsh-${body.id}` }
+    }
+
+    it.each([[1, 0.5], [2, 0.6], [3, 0.7], [4, 0.8], [5, 0.9]])('sends importance %i as %s', async (importance, expected) => {
+      const { sent, sessionId } = await remember(importance)
+      expect(sent).toEqual([{ path: '/v1/memory', json: {
+        project: 'launch', content: 'Canary before production.', memory_type: 'decision', user_id: 'alice',
+        session_id: sessionId, importance: expected, write_mode: 'sync',
+      } }])
+    })
+
+    it('sends RetainDB\'s default 0.7 when the request carries no importance', async () => {
+      const { sent } = await remember(undefined)
+      expect(sent.map(request => request.json.importance)).toEqual([0.7])
+    })
+
+    it('keeps an importance outside 1..5 within 0..1', async () => {
+      expect((await remember(9)).sent.map(request => request.json.importance)).toEqual([1])
+      expect((await remember(-9)).sent.map(request => request.json.importance)).toEqual([0])
+    })
+
+    it('sends the same importance to the legacy endpoint', async () => {
+      const { sent } = await remember(5, { currentMissing: true })
+      expect(sent.map(request => [request.path, request.json.importance])).toEqual([['/v1/memory', 0.9], ['/v1/memories', 0.9]])
+    })
+  })
 })

@@ -11,12 +11,16 @@ October 2026 come from that strategy:
 - [#454](https://github.com/omdsh-dev/dsh-mnemon/issues/454): score bands drop the right answer when scales differ.
 - [#455](https://github.com/omdsh-dev/dsh-mnemon/issues/455): a write field that OpenViking 0.5 rejects breaks every write.
 
-This plan updates the strategy:
+Several vendors now publish their own DeepSeek Harness integrations, too. This plan updates the
+strategy:
 
-- **One primary Provider** carries its own native verbs and the writes.
-- **Vendors' DSH plugins are bridged** where they exist, as the data plane.
-- **Recall stays grouped by Provider.**
-- **Automation is opt-in and bounded.**
+- **One primary Provider** receives dsh-mnemon's own writes, and other Providers stay read-only.
+- **Official vendor plugins run as their vendors ship them.** Their tools, recall and capture are the
+  real experience for that vendor, and dsh-mnemon does not adapt or override them.
+- **Presentation is per plugin.** dsh-mnemon shows every Provider's memory in one Memory System, and
+  each Provider plugin adds views for its vendor's characteristics.
+- **Reads and writes follow dsh-mnemon's layered write strategy only.**
+- **Recall stays grouped by Provider, and automation is opt-in and bounded.**
 
 Runtime memory, Project Documents and Memory Spaces keep their roles, and so do the Sources,
 Strategies and View between them. Existing features may change where the experience gets better.
@@ -55,23 +59,34 @@ How it compares:
   - Mnemon composes Runtime memory, Project Documents and Memory Spaces through a View. It keeps
     several discovered spaces per Provider and reports a write only after the exact text reads back.
     Recall is tool-driven by default, so prefetch and sync are opt-in.
-  - Hermes providers are packages written for Hermes. Mnemon bridges the DSH plugins vendors already
-    publish.
-- **Some decisions coincide.** One primary Provider at a time, Provider-native tools under the names
-  users know, no Provider session for delegated Agents, and a scrub of what leaves the machine. These
-  are made here for the reasons in the Aim: #452–#455 and the lab's costs. They are not made to
-  match Hermes.
+  - Hermes providers are packages written for Hermes. Where a vendor ships its own DSH plugin, Mnemon
+    leaves that plugin as it is and adds presentation and layered writes beside it.
+- **Some decisions coincide.** These are one primary Provider at a time, no Provider session for
+  delegated Agents, and a scrub of what leaves the machine. They are made here for the reasons in the
+  Aim, #452–#455, and for the lab's findings. They are not made to match Hermes.
 
 ## Decisions (2026-10-23)
 
-1. **One primary Provider, read-only secondaries.** One Provider holds the native verbs, the writes and
-   any automation. Other Providers can stay connected for read-only recall.
-2. **Familiar tool names.** Native verbs keep the names users know from these vendors' integrations
-   (`viking_search`, …).
-3. **Bridge the vendor's own DSH plugin.** Where a vendor publishes a compatible DSH plugin, it is
-   the data plane, and Mnemon bridges to it rather than calling the vendor service itself.
-4. **Automation off by default.** Prefetch, turn sync and mirroring are opt-in and bounded, and run
-   only for the primary Agent. Recall stays tool-driven by default.
+1. **One primary Provider, read-only secondaries.** One Provider receives dsh-mnemon's writes and
+   any of its automation. Other Providers can stay connected for read-only recall.
+2. **Official DSH plugins stay as shipped.** dsh-mnemon makes no forced-compatibility change to a
+   vendor's plugin:
+   - it does not hide its tools or shadow its skills;
+   - it does not rewrite its configuration;
+   - it does not route its own reads and writes through the plugin's tools.
+3. **Presentation per plugin.** Each Provider plugin contributes views for its vendor's
+   characteristics inside the unified Memory System, through the same contribution paths installed
+   plugins use.
+4. **Layered writes only.** dsh-mnemon's reads and writes follow its layers and per-space write policy
+   (#434). An active official plugin can lead to a suggestion, such as marking a space read-only for
+   dsh-mnemon's automatic writes to avoid duplicates beside the plugin's own capture. It never leads to
+   an automatic change.
+5. **Automation off by default.** dsh-mnemon's prefetch, turn sync and mirroring are opt-in and
+   bounded, and run only for the primary Agent. Recall stays tool-driven by default. A vendor plugin's
+   own automation is the vendor's and the user's choice.
+
+Decisions 2–4 replace a "bridge the vendor plugin" decision made earlier the same day. The spike
+behind it showed that bridging is possible; the user chose not to modify official plugins at all.
 
 ## Design
 
@@ -82,12 +97,14 @@ flowchart TB
     DOC["Project Documents"]
   end
   subgraph Slot["Memory Spaces = the Provider slot"]
-    P["Primary Provider: native verbs, writes, opt-in automation"]
+    P["Primary Provider: dsh-mnemon's writes, opt-in automation"]
     S["Secondary Providers: read-only, through mnemon_recall"]
   end
-  subgraph Vendor["Vendor DSH plugin (bridged)"]
-    VT["raw vendor tools, hidden per Agent"]
-    VS["vendor service: effective configuration"]
+  subgraph Official["Official vendor plugin (unchanged)"]
+    VT["the vendor's tools, recall and capture"]
+  end
+  subgraph Views["Provider plugin contributions"]
+    V["views for the vendor's characteristics, status, layered-write suggestion"]
   end
   RT --> Strategy["Strategy → ViewSpec"]
   DOC --> Strategy
@@ -95,113 +112,89 @@ flowchart TB
   S --> Strategy
   Strategy --> View["View: routes, fragments, ReadGrant, budgets"]
   View --> Model["Model"]
-  Model --> Host["Host: executes routes, receipts, scrub, Agent isolation"]
+  VT --> Model
+  Model --> Host["Host: executes Mnemon's routes, receipts, scrub, Agent isolation"]
   Host --> P
-  P -- bridge --> VT
-  P -. status .-> VS
+  P -. reads for display .-> Views
+  VT -. detected, never changed .-> Views
 ```
 
 ### The Provider slot
 
 **The primary Provider.** Memory Spaces holds exactly one primary Provider per storage scope:
 
-- its native verbs enter the View, replacing the ten generic Memory Spaces tools;
 - Save to memory and the task Agents write there by default;
-- opt-in automation applies only to it.
+- dsh-mnemon's opt-in automation applies only to it.
 
 Its namespaces stay discovered spaces, and activating spaces still sets the recall scope.
 
 **Secondary Providers.** These are optional and read-only. They are searched only through
-`mnemon_recall`, in their own result blocks. They get no native verbs, no automation and no writes,
-except a write the user names explicitly.
+`mnemon_recall`, in their own result blocks. They get no automation and no writes, except a write the
+user names explicitly.
 
 **The default.** Mnemon Native is the default primary. With no Mnemon CLI and no other Provider, the
 Memory Spaces layer is off and every other layer keeps working, as the layer-robustness direction of
 2026-10-08 requires.
 
-### Native verbs
+**Per-space write policy (#434).** A space is either writable (the default) or read-only for
+dsh-mnemon. Read-only spaces stay readable for recall, related, browse and search, and every mutation
+path refuses them before any Provider call. Secondaries are built on this policy.
 
-A Provider declares its native routes in the Memory Spaces Source. The Strategy chooses which routes
-the View shows, Core validates them, and the Host runs them under the View's ReadGrant and returns
-Source receipts.
+### Official DSH plugins
 
-Each route has a compact schema, and one Provider's routes stay under about 6 KB. For reference, the
-ten generic Memory Spaces tools measure 8,640 bytes, and OpenViking's raw MCP tools 15,261 bytes on
-server v0.4.21.
+Vendors that publish their own DSH integration for a Provider dsh-mnemon supports:
 
-| Provider | Routes | Data plane |
+| Provider | Official integration | Notes for Status |
 |---|---|---|
-| OpenViking | `viking_search`, `viking_read`, `viking_browse`, `viking_remember`, `viking_forget`, `viking_add_resource`, plus `viking_grep` | Bridged vendor plugin; Mnemon's adapter as fallback |
-| Mem0 | `mem0_search`, `mem0_add`, `mem0_update`, `mem0_delete` | Bridged `@mem0/deepseek-plugin` for search and add (Mem0 Platform only), the adapter for update, delete and self-hosted Mem0 |
-| Honcho | `honcho_profile`, `honcho_search`, `honcho_context`, `honcho_reasoning`, `honcho_conclude` | Adapter: the vendor plugin's peers stop at DSH 0.2.0-rc.1 |
-| Hindsight | the vendor's own tool names, already the familiar ones | Bridged `@vectorize-io/hindsight-coding-agents`, with its tools-only settings in its own configuration file; the adapter otherwise |
-| Holographic | `fact_store`, `fact_feedback` | Adapter |
-| agentmemory (#168) | `memory_recall`, `memory_smart_search`, `memory_save`, `memory_forget` | Bridged official MCP connection (`agentmemory connect dsh`); writes refused while its server is unreachable |
-| RetainDB, ByteRover, Supermemory | the names their integrations use | Adapter: no official DSH integration |
-| Mnemon Native | today's recall, related, link and graph verbs | Native CLI |
+| OpenViking | `@openviking/dsh-memory-plugin` (bundle; MCP tools, recall, capture, skills) | Captures every session by default, task Agents included, unless `skipSubagentSessions` is set; server-side extraction can rewrite memories |
+| Mem0 | `@mem0/deepseek-plugin` (Cordis plugin; `search_memory`, `add_memory`, recall, capture) | Mem0 Platform only; no subagent skip; telemetry on unless `MEM0_TELEMETRY=false` |
+| Hindsight | `@vectorize-io/hindsight-coding-agents install dsh` (Cordis row; native tools) | Skips subagents; settings in the shared `~/.hindsight/coding-agent.json`; about 7 KB of fixed tool guide |
+| agentmemory (#168) | `npx @agentmemory/agentmemory connect dsh` (home-level MCP row; optional hooks bridge) | Writes are lost while its server is down; the cold first start downloads more than 300 MB |
+| Honcho | `@honcho-ai/dsh-honcho` | Does not install on the supported DSH releases (peers stop at 0.2.0-rc.1) |
 
-### Bridged Providers
+RetainDB, ByteRover and Supermemory publish no DSH integration, and Holographic is local, so these
+keep only dsh-mnemon's Provider.
 
-A bridge uses the vendor's published DSH plugin for all I/O, so the vendor keeps its connection,
-authentication and server-version handling. The vendor's own tools and skill stay out of the model's
-view, and the user configures and inspects everything in one place.
+What dsh-mnemon does with an official plugin:
 
-A spike on 2026-10-23 proved every mechanism below with public DSH APIs. It ran on DSH 0.2.1-rc.2
-with `@openviking/dsh-memory-plugin@0.5.29` and OpenViking v0.4.21.
+- **Detects it, read-only.** It reports the package, the version, and the effective automation the
+  plugin itself exposes (for OpenViking, its `openvikingMemory` service). It changes nothing.
+- **Shows it.** Status gets one card per detected plugin, with the notes above stated as facts and
+  links to the vendor's settings. The Provider plugin also contributes the vendor-specific views below.
+- **Suggests, through the layered write strategy.** When a plugin captures into a namespace that a
+  dsh-mnemon space also writes, the space card suggests marking the space read-only for dsh-mnemon's
+  automatic writes. The user decides.
 
-1. **Routes.** `viking_search` runs
-   `ctx.tools.execute({ callId, name: 'mcp__openviking__find', arguments, signal })` without
-   `agent`. Execution resolves in the global view, so the raw tool runs even though it is hidden
-   from the Agent.
-2. **Hiding.** The vendor mounts its MCP tools whatever `mcpEnabled` says, because 0.5.29 never reads
-   that key. They are therefore denied per Agent:
-   - on `agent/created`, `agent.ctx.inject(['tools', 'skills'], scoped => scoped.tools.restrict({ deny }))`
-     denies every registered `mcp__openviking__*` tool;
-   - the same runs again, coalesced, on `tools/change`, because the MCP bridge registers its tools
-     after the Agent starts;
-   - names are recorded before `restrict` runs. `restrict` announces `tools/change` itself, and the
-     spike hung in a CPU-bound loop until it recorded first.
-3. **Skill shadowing.** The vendor's `openviking-memory` skill names the raw tools. An Agent-scoped
-   runtime skill with the same name replaces it, because scoped layers win over the global layer.
-   A runtime skill needs a `source`: without one, loading it fails with `source must be a string`.
-4. **Effective configuration.** The vendor service `openvikingMemory` exposes its resolved
-   configuration, and Status reads only its non-secret fields: `autoRecall`, `autoCapture`,
-   `skipSubagentSessions`, endpoint, account and user.
+What dsh-mnemon does not do:
 
-   The Host writes the vendor entry's configuration with DSH's `configEditor`, as it already does for
-   Mnemon's own entries: tools only, with subagent sessions skipped. A `plugin` section in the user's
-   `~/.openviking/ovcli.conf` outranks that host input, so Status compares the effective values with
-   the intended ones and says which file wins.
+- hide, rename or wrap the plugin's tools;
+- shadow its skills;
+- write its configuration;
+- call its tools for dsh-mnemon's own reads and writes.
 
-Writes through a bridge keep Mnemon's receipts:
+The plugin's tools reach the model as the vendor registered them.
 
-- `viking_remember` runs the raw `write` with `mode: create` and `wait: true`;
-- it parses the server's answer ("Wrote N bytes to `<uri>` … `vector=<state>`");
-- it reads the file back through the raw `read`;
-- it returns a Source receipt whose id is the URI.
+### Views for each vendor's characteristics
 
-The Content page, Direct search, Status and a new Resources view read through the same raw tools, so
-Mnemon never holds the vendor's credentials.
+Each Provider plugin contributes these views through the plugin-first contribution paths. They keep
+the unified scheme's controls, layout and copy rules, and add what the vendor is distinctive for. A
+view lands only with a report or a measured gap behind it.
 
-Each bridge is described in data:
-
-- the vendor package and its version range, and the DSH range;
-- the raw-tool mapping and argument shaping;
-- the configuration keys for tools only;
-- the skills to shadow;
-- the service fields Status reads;
-- how namespaces map to spaces.
-
-When the vendor plugin is missing or outside its range, the Provider falls back to Mnemon's adapter,
-which serves the same route names it can honour.
+| Provider | Candidate views |
+|---|---|
+| OpenViking | the `viking://` hierarchy; Resources, with images and attachments the server holds (the display side of #453); Provider Changes, from `memory_diff.json` of committed sessions |
+| Hindsight | banks, and the bank's graph and reflections where the server provides them |
+| Mem0 | a memory's history across updates, and its categories |
+| agentmemory (#168) | sessions and observations, which needs a dsh-mnemon Provider for presentation (REST on 3111) |
+| Honcho | peers and their representations |
 
 ### Recall grouped by Provider
 
 Results stay in their Provider's own order, one fenced and deduplicated block per Provider, each
 naming its Provider.
 
-Score bands are removed for Providers whose scores are not calibrated (#454). Ranking then rests on
-the Provider's own rank and the Agent's own judgment, plus Jev's yes/rank signals in simple mode.
+Score bands are kept only for scores Mnemon computes itself (#454). Rows from other Providers keep
+their Provider's order. The Agent judges them, with Jev's yes/rank signals in simple mode.
 
 A short line in the conversation shows which spaces were used, such as "Memory used: Lab machines
 (OpenViking) · 3".
@@ -215,26 +208,23 @@ A short line in the conversation shows which spaces were used, such as "Memory u
 | A prefetch each turn | "Prefetch each turn" enhancement, run by the Host | off | timeout, character budget, cadence |
 | A sync of the conversation | "Sync the conversation to the Provider" enhancement, in the background after the scrub | off | one per turn, primary Agent only |
 | Mirroring of Runtime memory writes | Runtime memory receipts mirrored to the primary Provider, deterministically, with no LLM | off | one per write |
-| Task Agent isolation | Task Agents never get a Provider session or trigger capture | enforced | — |
+| Task Agent isolation | Task Agents never get a dsh-mnemon Provider session or trigger capture | enforced | — |
 
 Sync stays off by default. On 2026-10-23, OpenViking's server-side extraction rewrote a saved
-preference from Chinese to English after an unrelated resource upload. It also turned plain
-questions and answers into new memories.
-
-Turning sync on also turns on a Provider Changes view. It reads `memory_diff.json` for OpenViking and
-the history API for Mem0, and offers undo where the Provider allows it.
+preference from Chinese to English after an unrelated resource upload, and it turned plain questions
+and answers into new memories. Provider Changes makes such rewrites visible, whoever triggered them.
 
 ### Setup and status
 
-- **The status line.** The Status page opens with one line: "Memory Provider: OpenViking ✓
+- **The status line.** The Status page opens with one line, such as "Memory Provider: OpenViking ✓
   available · 3 spaces", and a gear beside it.
 - **The picker.** The gear opens a single-choice list whose first entry is "Mnemon Native (default)".
 - **Choosing a Provider.** Only the required fields are asked for. Secrets are masked, with a link to
   where they come from. OpenViking can reuse `~/.openviking/ovcli.conf`.
-- **Bridged Providers.** The same flow offers to install the vendor plugin through Mnemon's existing
-  plugin installation, then writes the tools-only configuration.
-- **Importing settings.** An existing setup in another agent's configuration, such as `~/.hermes`,
-  can be imported after the user confirms.
+- **Official plugins.** Each detected plugin gets its card, as described above. Nothing about the plugin
+  is changed from Mnemon.
+- **Importing settings.** An existing setup in another agent's configuration, such as `~/.hermes`, can
+  be imported after the user confirms.
 - **Finishing.** Spaces are discovered, and the status line turns to ✓ or names what is missing.
 - **Secondaries.** They sit in an "Additional Providers (read-only)" block, off until switched on.
 
@@ -253,40 +243,41 @@ No data moves.
 | Invariant | How it holds | How it is tested |
 |---|---|---|
 | The layers are independent | Runtime and Documents never depend on the slot. An empty slot turns Memory Spaces off, and a full MEMORY.md archives locally | Layer-combination matrix at capacity, with no Provider and with no space |
-| The View is the only door | Native verbs are Source routes. Vendor tools are hidden per Agent, and their skills are shadowed | Tool-inventory snapshot tests, plus a warning when a vendor plugin runs without the bridge |
-| Per-turn cost is bounded | The primary's routes replace the generic tools. Secondaries share one route. Automation has timeouts, budgets and cadence | Request-size ceilings in tests and in the lab |
+| Mnemon's tools go through the View | Mnemon's own reads and writes are Source routes under the View. Official plugins' tools are the vendor's and stay unchanged | Tool-inventory snapshot tests with and without an official plugin |
+| Official plugins are not modified | Detection reads only what a plugin exposes. No configuration write, tool restriction or skill registration targets a vendor plugin | Tests that the vendor's tools, configuration and skills are byte-identical with dsh-mnemon on and off |
+| Per-turn cost is bounded | Secondaries share one route. Automation has timeouts, budgets and cadence | Request-size ceilings in tests and in the lab |
 | Receipts mean stored | Writes keep exact readback. Asynchronous server-side extraction appears only in Provider Changes | Receipt tests against a real server |
-| Task Agents stay isolated | No prefetch, sync, mirror or vendor session for task Agents | A server-side check that no task-Agent session exists |
+| Task Agents stay isolated | No prefetch, sync or mirror from dsh-mnemon for task Agents | Host tests |
 | Strategies stay pure | Strategies declare budgets, and the Host runs them | Existing Strategy contract tests |
 | Data stays within its boundary | Pack and Git sync still carry only official components | Existing Pack and sync tests |
 
 ## Expected files
 
-- `plugins/dsh-mnemon-source-memory-spaces/src/provider-sdk.ts`: native routes, the bridge
-  descriptor and optional lifecycle facts in the Provider contract.
-- `plugins/dsh-mnemon-source-memory-spaces/src/service.ts`, `source.ts`: the slot (primary and
-  secondaries), recall blocks, and management operations for the slot.
-- `plugins/dsh-mnemon-source-memory-spaces/src/recall-quality/policies.ts`: no score bands for
-  uncalibrated Providers.
-- `plugins/dsh-mnemon-source-memory-spaces/src/client/overview-page.tsx`, `provider-settings.tsx`,
-  `settings.tsx`: the picker, status line, secondaries and Provider Changes.
-- `plugins/dsh-mnemon-provider-openviking/src/bridge.ts` (new), `driver.ts`, `descriptor.ts`: the
-  OpenViking bridge and the adapter fallback.
-- `src/host/vendor-bridge.ts` (new): per-Agent hiding, skill shadowing, route execution, and vendor
-  configuration through `configEditor`.
-- `src/host/memory-tools.ts`, `src/host/subagent.ts`: routes in the View and in task Agents'
-  allowlists.
+- `plugins/dsh-mnemon-source-memory-spaces/src/*`:
+  - the per-space write policy;
+  - the slot (primary and secondaries) and recall blocks;
+  - the management operations for both;
+  - the contribution points that Provider plugins use for their views and Status cards.
+- `plugins/dsh-mnemon-provider-<id>/src/*`: each Provider's detection of its vendor's official plugin
+  (read-only), and its characteristic views and Status card.
+- `plugins/dsh-mnemon-source-memory-spaces/src/client/*`: the picker, the status line, secondaries and
+  the layered-write suggestion.
 - `plugins/dsh-mnemon-strategy-default-three-tier/src/guidance.ts`: the Provider usage-note slot.
 - The opt-in automation goes into the existing enhancement mechanism. A new package is added only if
-  a gate requires one.
-- `docs/{en,zh-CN}/guides/memory-providers.md`, `docs/{en,zh-CN}/reference/configuration.md`.
-- Tests: `tests/vendor-bridge.spec.ts`, Provider slot and recall-block tests, and the layer matrix.
+  a gate requires one; the agentmemory presentation Provider (#168) is the expected exception.
+- `docs/{en,zh-CN}/guides/memory-providers.md` and `docs/{en,zh-CN}/reference/configuration.md`.
+- Tests:
+  - per-space write policy tests;
+  - Provider slot and recall-block tests;
+  - the official-plugin byte-identity tests;
+  - the layer matrix.
 
 ## Non-goals
 
 - A second memory engine or a rewrite of the retrieval engine. mnemon (Go) stays the engine.
 - A copy of another agent's memory system.
-- Calling vendor services from Mnemon where a compatible vendor DSH plugin exists.
+- Any change to an official vendor plugin's tools, skills, configuration or behavior.
+- Re-implementing a vendor feature that its official plugin already provides to the model.
 - Bundling vendor plugins in the Starter; they are installed when the user chooses them.
 - Automation on by default, or for any Agent other than the primary one.
 - Changing what Pack and Git sync carry.
@@ -297,35 +288,33 @@ No data moves.
 Rules:
 
 - Each step must close a reported problem or a measured gap before the next one starts.
-- Bridges are data, one per vendor. A shared helper is written only when a second vendor needs it.
-- The adapter fallback serves only the routes it already serves; it gets no new features without a
-  report.
+- Vendor-specific code lives in that vendor's Provider plugin. The core only offers contribution points.
+- A characteristic view reuses the unified scheme's components. A new component is added only when two
+  vendors need it.
 
 Warning signals:
 
-- a general plugin-proxy layer;
-- a registry of bridges with more than one level of indirection;
-- schema translation beyond renaming and narrowing arguments;
-- re-implementing a vendor feature that its plugin already provides.
+- per-vendor branches in the core;
+- a view that needs credentials dsh-mnemon does not already hold;
+- detection that does more than read.
 
 Complexity budget:
 
 | Part | Budget |
 |---|---|
-| Bridge runtime (`src/host/vendor-bridge.ts`) | about 300 lines |
-| One bridge descriptor | about 150 lines |
+| Per-space write policy | about 300 lines |
+| Contribution points for Provider views and cards | about 200 lines |
+| One vendor's detection, views and card | about 300 lines |
 | Slot and recall blocks in Memory Spaces | about 400 lines changed |
-| UI | about 600 lines |
 
 Exceeding any of these by half means stopping to ask.
 
 ## Stop and ask
 
-- Hiding or shadowing needs a DSH change, or does not work on DSH 0.2.0-rc.2 or on npm `next` (0.2.1-rc.3 since 2026-10-23).
-- A vendor plugin's fixed prompt cost exceeds the per-Provider budget and cannot be turned off (Hindsight's tool guide measured about 7 KB).
-- A vendor plugin cannot be held to tools only, because its automation cannot be turned off.
+- Any step would change an official plugin's tools, skills, configuration or behavior.
+- A characteristic view needs vendor credentials or a vendor service that dsh-mnemon does not
+  already reach through its own Provider.
 - Recall blocks lose accuracy against today's federated recall (non-inferiority −2 points).
-- Bridged turns cost more than 1.25× the adapter's on the same questions.
 - A migration step would move, rewrite or delete existing memory.
 
 ## Build order and gates
@@ -333,71 +322,59 @@ Exceeding any of these by half means stopping to ask.
 0. **Adapter fixes that change no behavior.** These ship first, one pull request each:
    - #455: OpenViking writes carry only the fields every server release declares;
    - #452: keyword search gains an exact-text channel through `/api/v1/search/grep`;
-   - #454: scores a Provider does not calibrate get no bands.
+   - #454: scores a Provider does not calibrate get no bands;
+   - #447: Holographic maps importance onto its trust scale;
+   - RetainDB: importance on RetainDB's 0–1 scale.
 
    Gate: each fix is proven on a real server or a contract test, and every untouched route stays
    byte-identical.
-1. **The bridge runtime and the OpenViking bridge,** behind an off-by-default switch.
+1. **Per-space write policy (#434).**
+   Gate: no mutation path reaches a Provider for a read-only space, and default behavior is
+   byte-identical.
+2. **OpenViking beside its official plugin.** This step covers read-only detection, the
+   characteristic views (with the display side of #453) and the layered-write suggestion.
    Gate:
-   - spike parity on DSH 0.2.1-rc.2 and 0.2.0-rc.2;
-   - the same answers as the adapter on the lab questions, at ≤ 1.25× the cost;
-   - no `mcp__openviking__*` tool visible to any Agent;
-   - no task-Agent session on the server.
-2. **The Provider slot and recall blocks.** Gate: the layer matrix passes; the #454 case is answered
-   correctly with OpenViking plus Hindsight; non-inferiority holds on the lab set.
-3. **Setup, status and migration in the WebUI.** Gate: before-and-after recordings, a count of the
-   first-run steps for OpenViking, and updated copy and presentation baselines.
-4. **Automation enhancements:** overview, prefetch, sync, mirror and Provider Changes. Gate: each is
-   off by default, per-turn cost stays within its bound, and extraction-driven rewrites are shown
-   and can be undone.
-5. **More bridges.** Each has its own gate from step 1:
-   - Mem0, with automatic recall and capture off: its plugin cannot skip subagent sessions.
-   - Hindsight, whose tools-only settings live in its shared configuration file.
-   - agentmemory (#168), with a write gate on its server probe.
-   - Honcho once its plugin installs on current DSH releases: today both supported hosts refuse it.
+   - the vendor plugin's tools, configuration and behavior are byte-identical with dsh-mnemon on;
+   - before-and-after screenshots of the views on a real server.
+3. **The Provider slot, recall blocks, setup, status and migration.**
+   Gate:
+   - the layer matrix passes;
+   - the #454 case is answered correctly with OpenViking plus Hindsight;
+   - non-inferiority holds on the lab set;
+   - before-and-after recordings exist.
+4. **Automation enhancements:** overview, prefetch, sync and mirror.
+   Gate: each is off by default, and per-turn cost stays within its bound.
+5. **The other official plugins.** Mem0, Hindsight and agentmemory (#168, with its presentation
+   Provider) get detection and their characteristic views. Honcho gets a Status card until its plugin
+   installs on current DSH releases.
 
 ## Progress
 
 - [x] Research: how other agents handle third-party memory providers (Hermes Agent)
 - [x] Lab: the official OpenViking plugin beside dsh-mnemon (coexistence, side effects, costs)
-- [x] Spike: compact routes over the vendor plugin, per-Agent hiding, skill shadowing, effective configuration
-- [ ] 0. #455 adapter fix
-- [ ] 0. #452 adapter fix
-- [ ] 0. #454 adapter fix
-- [ ] 1. Bridge runtime and the OpenViking bridge
-- [ ] 2. Provider slot and recall blocks
-- [ ] 3. Setup, status and migration
-- [ ] 4. Automation enhancements
 - [x] Survey: the official DSH integrations of Mem0, Hindsight, Honcho and agentmemory
-- [ ] 5. Mem0, Hindsight and agentmemory bridges; Honcho stays on the adapter until its plugin installs
+- [ ] 0. #455, #452, #454, #447 and RetainDB adapter fixes
+- [ ] 1. Per-space write policy (#434)
+- [ ] 2. OpenViking beside its official plugin
+- [ ] 3. Provider slot, recall blocks, setup, status and migration
+- [ ] 4. Automation enhancements
+- [ ] 5. Mem0, Hindsight, agentmemory and Honcho
 
 ## Evidence
 
 The lab ran on 2026-10-23: DSH 0.2.1-rc.2 headless with real DeepSeek turns, OpenViking v0.4.21 with
 synthetic data, and request bodies recorded on loopback.
 
-| Question set | Mnemon's adapter | Vendor tools exposed raw | Bridged, compact routes |
-|---|---:|---:|---:|
-| Find Docker Engine 29.8.137 among 200 near-identical hosts (input tokens) | 46,111 | 141,584 | 49,266 |
-| OpenViking tool schemas per request (bytes) | — | 15,261 (15 tools) | 916 (3 routes) |
-| Correct answers | all | all | all |
+With the OpenViking plugin's defaults, which recall and capture automatically:
 
-With the vendor plugin's defaults, which recall and capture automatically:
-
-- the Q1–Q3 questions cost 3.4× the adapter's tokens;
-- one answer came in English, because a rewritten preference was recalled;
+- the Q1–Q3 questions cost 3.4× the tokens of Mnemon's adapter;
+- one answer came in English, because a preference rewritten by server-side extraction was recalled;
 - every short session was committed for extraction, task Agents included.
 
-The tools-only configuration, with subagent sessions skipped, captured nothing.
+A spike the same day showed that dsh-mnemon could hide a vendor plugin's tools per Agent, shadow its
+skills and route compact calls through its tools with public DSH APIs. That cut the OpenViking tool
+schemas in a request from 15,261 to 916 bytes. A second lab showed the same for Mem0, Hindsight and
+agentmemory on DSH 0.2.1-rc.2 and 0.2.0-rc.2.
 
-A second lab the same day installed the official integrations of Mem0, Hindsight and agentmemory beside
-dsh-mnemon, on DSH 0.2.1-rc.2 and 0.2.0-rc.2.
-
-- **The mechanisms held for all three.** Calls through `ctx.tools.execute`, per-Agent hiding re-applied on
-  `tools/change`, and hiding in task Agents all worked on both hosts.
-- **The cost fell.** With all three on their defaults, a request carried 62 tools in 48,529 bytes. Bridged,
-  it carried 55 tools in 43,797 bytes, and one step's input fell from 15,096 to 13,982 tokens.
-- **Defaults to switch off.** Mem0's automatic capture stored task Agent sessions, including internal
-  orchestration instructions, in the user's Mem0. agentmemory accepts writes into memory while its server
-  is down, and those writes are lost on exit.
-- **Honcho could not be tested.** Its plugin does not install on either supported host.
+This strategy deliberately does not use those mechanisms. Official plugins stay as their vendors ship
+them, and the findings above become facts on Status and inputs to the layered-write suggestion.

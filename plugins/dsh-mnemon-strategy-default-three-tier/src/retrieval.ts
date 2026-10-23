@@ -127,8 +127,8 @@ function boundedModelInsights(results: readonly RecallInsight[], admission: Mode
   for (const result of results) {
     if (admitted.length >= resultLimit || result.id.length === 0 || result.id.length > 1_000) continue
     const tier = result.relevanceTier ?? 'unknown'
-    // A ranked row comes from a Provider without calibrated scores, in that Provider's own order:
-    // like a high row, only the result and content limits bound it (#454).
+    // A ranked row keeps its Provider's order, and the Source already caps how many arrive
+    // (maxRankedResults): like a high row, only the result and content limits bound it here (#454).
     if (tier === 'low') continue
     if (tier === 'medium' && mediumCount >= mediumLimit) continue
     if (tier === 'unknown' && unknownCount >= unknownLimit) continue

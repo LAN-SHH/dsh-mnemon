@@ -5,7 +5,7 @@ import type { JsonValue } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 import type { MemorySpaceAuthority } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 import { runProcess, type ProcessRunner } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 import type { Insight, MemoryBody as MemorySpace, MemoryGraphSnapshot, MemoryListRequest, MemoryProviderConnection, RememberRequest, SearchRequest } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
-import { type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
+import { NORMALIZED_RELEVANCE_SCORE, type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 
 interface ByteRoverProviderOptions {
   process?: ProcessRunner
@@ -15,6 +15,7 @@ interface ByteRoverProviderOptions {
 
 export class ByteRoverProvider implements MemoryProviderAdapter {
   readonly id = 'byterover' as const
+  readonly scoreSemantics = NORMALIZED_RELEVANCE_SCORE
   private readonly process: ProcessRunner
   private readonly queryTimeoutMs: number
   private readonly curateTimeoutMs: number

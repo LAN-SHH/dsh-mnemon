@@ -76,7 +76,7 @@ describe('Memory Spaces algorithm work bounds', () => {
         status: 'ready', itemCount: 4,
         quality: { policyId: 'counted-v1', fetched: 7, retained: 4,
           selected: result.results.filter(row => row.memoryBodyId === source.memoryBodyId).length,
-          droppedLowScore: 1, droppedNonPositiveScore: 1, droppedInvalidScore: 1, unscored: 1, unscaled: 0, outOfRange: 1 },
+          droppedLowScore: 1, droppedNonPositiveScore: 1, droppedInvalidScore: 1, unscored: 1, unscaled: 1 },
       })
       expect(visits).toBeLessThanOrEqual(n * 7 + 10)
       expect(result.results.every(row => row.id !== 'r2' && row.id !== 'r3' && row.id !== 'r4')).toBe(true)
@@ -93,7 +93,7 @@ describe('Memory Spaces algorithm work bounds', () => {
       const result = await service.search({ query: 'evidence', mode: 'basic' })
       expect(result.results).toEqual([])
       expect(result.sources.map(source => source.status)).toEqual(['unavailable', 'unsupported'])
-      for (const source of result.sources) expect(source.quality).toEqual({ policyId: 'strict-v1', fetched: 0, retained: 0, selected: 0, droppedLowScore: 0, droppedNonPositiveScore: 0, droppedInvalidScore: 0, unscored: 0, unscaled: 0, outOfRange: 0 })
+      for (const source of result.sources) expect(source.quality).toEqual({ policyId: 'strict-v1', fetched: 0, retained: 0, selected: 0, droppedLowScore: 0, droppedNonPositiveScore: 0, droppedInvalidScore: 0, unscored: 0, unscaled: 0 })
     } finally { await service.dispose() }
   })
 

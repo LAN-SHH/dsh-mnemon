@@ -61,6 +61,7 @@ mnemon:
     candidateMultiplier: 3
     maxMediumResults: 4
     maxUnknownResults: 2
+    maxRankedResults: 2
   routingGuidance: true
   lifecycleEnabled: true
   recallMode: guided
@@ -107,11 +108,12 @@ mnemon:
 | `memoryView.entries.<entry>.config` | `{}` | the options a component declares | Options saved from a component's page. On/off is not stored here: DSH's plugin manager writes it as the Entry's `disabled` row in the profile patch, and earlier saved choices are moved there once |
 | `persistenceStrategy` | `{ mode: manual }` | `manual` / `automatic`, `providerId`, `prompt`, `rules` | Provider for new spaces: when a task Agent creates a Memory Space, one fixed Provider, or smart selection with allowed Providers, data boundary, required capabilities and preference; existing spaces are still chosen by name and description |
 | `recallQuality.policy` | `strict-v1` | registered policy id | Deterministic policy applied before recall content is serialized to an Agent or client |
-| `recallQuality.lowScoreThreshold` | `0.25` | 0–1, below high threshold | Calibrated scores below this boundary are removed by `strict-v1`. Only Mnemon Native and Holographic report calibrated scores; other Providers' rows are `ranked` and never compared with these thresholds |
-| `recallQuality.highScoreThreshold` | `0.6` | 0–1, above low threshold | Retained calibrated scores at or above this boundary are labeled high relevance |
+| `recallQuality.lowScoreThreshold` | `0.25` | 0–1, below high threshold | Normalized scores below this boundary are removed by `strict-v1` |
+| `recallQuality.highScoreThreshold` | `0.6` | 0–1, above low threshold | Retained normalized scores at or above this boundary are labeled high relevance |
 | `recallQuality.candidateMultiplier` | `3` | 1–5 | Expands each Provider request before filtering, capped by the service limit of 50 candidates |
 | `recallQuality.maxMediumResults` | `4` | 0–50 | Maximum medium-relevance rows admitted by `strict-v1` after all high-relevance rows |
-| `recallQuality.maxUnknownResults` | `2` | 0–50 | Maximum unscored or out-of-range rows admitted by `strict-v1` after scored evidence; `ranked` rows are not counted and keep their place in the federated order |
+| `recallQuality.maxUnknownResults` | `2` | 0–50 | Maximum unscored or unknown-scale rows admitted by `strict-v1` after scored evidence |
+| `recallQuality.maxRankedResults` | `2` | 0–50 | Maximum OpenViking rows `strict-v1` keeps in OpenViking's own order per search, when the search also covers another Provider and both thresholds are at their defaults; they follow the high-relevance rows. See [Recall quality policies](#recall-quality-policies) |
 | `routingGuidance` | `true` | boolean | Whether to register an additional tiered-routing system section |
 | `lifecycleEnabled` | `true` | boolean | Whether to enable the pre-step cue and score-based idle review |
 | `recallMode` | `guided` | `guided` / `off` | Whether to inject one durable on-demand recall cue per session; does not remove explicit recall |
@@ -198,7 +200,12 @@ The WebUI reads Source instances from the live management catalog, so a new Sour
 
 ### Recall quality policies
 
-`strict-v1` is the Agent-safe default: for Providers that explicitly declare a normalized 0–1 relevance score, non-positive and below-threshold rows are removed before their content reaches an Agent. It then returns every high-relevance row up to the requested limit, at most four medium-relevance rows, and at most two unscored or unknown-scale rows by default; it does not fill the result limit with weaker evidence. `balanced-v1` retains low-score rows only after primary evidence, and `exhaustive-v1` preserves finite scored rows for direct inspection. An out-of-range score is treated as unknown-scale instead of being fabricated into a confidence value. Cross-provider ordering continues to use reciprocal-rank fusion.
+`strict-v1` is the Agent-safe default. It bands the scores of Providers that declare 0–1 relevance: non-positive and below-threshold rows are removed before their content reaches an Agent. It then returns every high-relevance row up to the requested limit, at most four medium-relevance rows, and at most two unscored or unknown-scale rows by default; it does not fill the result limit with weaker evidence. Two Providers' scores are read differently (#454):
+
+- **Hindsight** adds reranker and recency boosts to its final score, so a relevant memory can score above 1. Such a score counts as 1, in every policy.
+- **OpenViking** reports the raw similarity of whichever embedding model its server uses, which the default thresholds do not fit. In a search that also covers another Provider, with both thresholds at their defaults, `strict-v1` keeps OpenViking's rows in OpenViking's own order (`relevanceTier: ranked`). They follow the high-relevance rows and come before medium ones, at most `maxRankedResults` (two by default) per search. Keyword matches without a score count among them. A search of OpenViking alone, or a threshold set away from its default, bands OpenViking's rows as before.
+
+`balanced-v1` retains low-score rows only after primary evidence, and `exhaustive-v1` preserves finite scored rows for direct inspection; both band OpenViking's rows. Any other score above 1 is treated as unknown-scale instead of being fabricated into a confidence value. Cross-provider ordering continues to use reciprocal-rank fusion.
 
 These pure recall-quality policies belong to the Memory Spaces Source. Configuration selects a policy ID shipped by that Source. Its internal registration function is not a public plugin API; custom retrieval belongs behind the public Source/Provider contracts. Invalid limits, decisions, or selections fall back to `strict-v1`; an unknown configured id rejects the candidate runtime graph. Filtering counts are returned as structured `source.quality` statistics and are not appended to Agent hints.
 

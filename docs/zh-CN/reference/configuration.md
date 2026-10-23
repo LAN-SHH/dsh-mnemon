@@ -61,6 +61,7 @@ mnemon:
     candidateMultiplier: 3
     maxMediumResults: 4
     maxUnknownResults: 2
+    maxRankedResults: 2
   routingGuidance: true
   lifecycleEnabled: true
   recallMode: guided
@@ -107,11 +108,12 @@ mnemon:
 | `memoryView.entries.<entry>.config` | `{}` | 组件声明的选项 | 在组件页保存的选项。开关状态不在这里：DSH 插件管理器把它写为 profile patch 中对应 Entry 的 `disabled` 行，早先保存的选择会一次性迁移过去 |
 | `persistenceStrategy` | `{ mode: manual }` | `manual` / `automatic`、`providerId`、`prompt`、`rules` | 新空间的 Provider：任务 Agent 新建记忆空间时固定使用一个 Provider，或按允许的 Provider、数据边界、必需能力与偏好智能选择；已有空间仍按名称与说明路由 |
 | `recallQuality.policy` | `strict-v1` | 已注册策略 ID | 在召回正文序列化给 Agent 或客户端前执行的确定性策略 |
-| `recallQuality.lowScoreThreshold` | `0.25` | 0–1，低于高分阈值 | `strict-v1` 会移除低于此边界的已校准分数结果。只有 Mnemon Native 与 Holographic 报告已校准的分数；其他 Provider 的结果为 `ranked`，从不与这些阈值比较 |
-| `recallQuality.highScoreThreshold` | `0.6` | 0–1，高于低分阈值 | 保留的已校准分数达到此边界时标记为高相关度 |
+| `recallQuality.lowScoreThreshold` | `0.25` | 0–1，低于高分阈值 | `strict-v1` 会移除低于此边界的标准化分数结果 |
+| `recallQuality.highScoreThreshold` | `0.6` | 0–1，高于低分阈值 | 保留结果达到此边界时标记为高相关度 |
 | `recallQuality.candidateMultiplier` | `3` | 1–5 | 在过滤前扩大各 Provider 候选请求，最多不超过服务的 50 条上限 |
 | `recallQuality.maxMediumResults` | `4` | 0–50 | `strict-v1` 在全部高相关度结果之后最多接纳的中相关度条数 |
-| `recallQuality.maxUnknownResults` | `2` | 0–50 | `strict-v1` 在有分数证据之后最多接纳的无 score 或超出范围的条数；`ranked` 结果不计入，并保留其在联合排序中的位置 |
+| `recallQuality.maxUnknownResults` | `2` | 0–50 | `strict-v1` 在有分数证据之后最多接纳的无 score 或未知量纲条数 |
+| `recallQuality.maxRankedResults` | `2` | 0–50 | 检索同时覆盖其他 Provider、且两个阈值都是默认值时，`strict-v1` 每次检索按 OpenViking 自己的顺序最多保留的 OpenViking 条数；它们排在高相关度结果之后。见[召回质量策略](#召回质量策略) |
 | `routingGuidance` | `true` | boolean | 是否注册额外的分层路由 system section |
 | `lifecycleEnabled` | `true` | boolean | 是否启用 pre-step cue 和评分空闲审查 |
 | `recallMode` | `guided` | `guided` / `off` | 是否在每个会话注入一次可持续复用的按需 recall cue；不移除显式召回 |
@@ -198,7 +200,12 @@ WebUI 从实时管理目录读取 Source 实例，新增 Source 无须修改前�
 
 ### 召回质量策略
 
-`strict-v1` 是面向 Agent 的安全默认值：仅对明确声明为 0–1 标准化相关度的 Provider，在正文进入 Agent 前移除非正分和低于阈值的结果；随后在请求上限内保留全部高相关度结果，默认最多保留 4 条中相关度结果和 2 条无 score 或未知量纲结果，不再用较弱证据补满 limit。`balanced-v1` 把低分结果放在主要证据之后，`exhaustive-v1` 为直接检查保留有限分数结果。超出声明范围的分数按未知量纲处理，不伪造成置信度。跨 Provider 排序继续使用倒数排名融合。
+`strict-v1` 是面向 Agent 的安全默认值，对声明为 0–1 相关度的 Provider 按分数分档：在正文进入 Agent 前移除非正分和低于阈值的结果；随后在请求上限内保留全部高相关度结果，默认最多保留 4 条中相关度结果和 2 条无 score 或未知量纲结果，不再用较弱证据补满 limit。有两个 Provider 的分数另行解读（#454）：
+
+- **Hindsight** 的最终分数叠加了 reranker 与时效加成，相关记忆可能超过 1。这样的分数在所有策略中都按 1 计。
+- **OpenViking** 报告其服务端所用 embedding 模型的原始相似度，默认阈值并不适用。检索同时覆盖其他 Provider、且两个阈值都是默认值时，`strict-v1` 按 OpenViking 自己的顺序保留它的结果（`relevanceTier: ranked`）。这些结果排在高相关度结果之后、中相关度结果之前，每次检索最多 `maxRankedResults` 条（默认两条），不带分数的关键词匹配也计入其中。只检索 OpenViking，或把任一阈值改离默认值时，OpenViking 的结果仍按原方式分档。
+
+`balanced-v1` 把低分结果放在主要证据之后，`exhaustive-v1` 为直接检查保留有限分数结果；两者都对 OpenViking 的结果分档。其他超过 1 的分数按未知量纲处理，不伪造成置信度。跨 Provider 排序继续使用倒数排名融合。
 
 这些是 Memory Spaces Source 自己维护的纯函数召回质量策略，配置只能选择已随该 Source 提供的策略 ID。内部注册函数不是公开插件 API；自定义检索实现应通过 Source/Provider 的公开契约接入。非法候选上限、决策或选择会回退到 `strict-v1`；配置未知 ID 会拒绝候选运行图。过滤计数通过结构化的 `source.quality` 返回，不会拼接进 Agent hint。
 

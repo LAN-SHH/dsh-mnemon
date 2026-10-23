@@ -11,8 +11,7 @@ import { STRICT_RECALL_QUALITY_POLICY } from './policies.ts'
 const ACTIONS = new Set(['keep', 'drop'])
 const TIERS = new Set(['high', 'medium', 'low', 'unknown', 'ranked'])
 const REASONS = new Set([
-  'high-score', 'medium-score', 'low-score', 'non-positive-score', 'invalid-score',
-  'uncalibrated-score', 'out-of-range-score', 'unscaled-score', 'unscored',
+  'high-score', 'medium-score', 'low-score', 'non-positive-score', 'invalid-score', 'unscaled-score', 'uncalibrated-score', 'unscored',
 ])
 
 function assertDecision(decision: RecallQualityDecision): void {

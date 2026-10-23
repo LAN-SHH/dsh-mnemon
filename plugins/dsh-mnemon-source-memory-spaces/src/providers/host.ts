@@ -67,6 +67,9 @@ function assertRuntime(definition: MemorySpaceProviderDefinition, adapter: Memor
   if (manifest.scoreSemantics === 'normalized-relevance' && adapter.scoreSemantics?.kind !== 'normalized-relevance') {
     throw new Error(`Memory Space Provider ${manifest.typeId} declares normalized scores but its runtime does not`)
   }
+  if (manifest.scoreSemantics !== 'normalized-relevance' && adapter.scoreSemantics?.kind === 'normalized-relevance') {
+    throw new Error(`Memory Space Provider ${manifest.typeId} reports normalized scores but declares ${manifest.scoreSemantics}`)
+  }
 }
 
 /** Expose the configured child identity while preserving the driver methods. */

@@ -193,7 +193,12 @@ Every mutation receipt declares `completion`: `accepted`, `candidate`, `committe
 
 Provider authors use `defineMemorySpaceProvider` from Memory Spaces' SDK. A module receives only its bound `host.install(ctx, definition)` capability; the private parent Host, Snapshot and Registry are not SDK exports. `installMemorySpaces` mounts explicit children and returns `Promise<void>`, not a parent handle. [external-provider.ts](../../../scripts/fixtures/plugin-consumer/src/external-provider.ts) is tested in two independent parent Sources with identical child ids.
 
-Declare `scoreSemantics: 'normalized-relevance'` in the manifest, with `NORMALIZED_RELEVANCE_SCORE` on the adapter, only when your scores are calibrated 0–1 relevance that means the same in every query and Memory Space; `recallQuality` bands those with fixed thresholds. An engine's own scale, such as raw embedding similarity or reranker output, is `provider-native`: recall keeps those results in your order, marks them `ranked` and never compares them with the thresholds. Use `none` when results carry no meaningful score.
+Declare `scoreSemantics: 'normalized-relevance'` in the manifest, with `NORMALIZED_RELEVANCE_SCORE` on the adapter, for relevance scores in 0–1; `recallQuality` bands them with its thresholds. Two adapter-only refinements describe scores that depart from that:
+
+- `{ kind: 'normalized-relevance', scale: 'boosted' }`: the engine adds boosts that can carry a relevant result past 1. Such a score counts as 1.
+- `{ kind: 'normalized-relevance', scale: 'embedding-similarity' }`: the scores are raw similarity from the server's embedding model. In a search that also covers another Provider, with both thresholds at their defaults, `strict-v1` keeps these rows in your order after the high-relevance rows, at most `maxRankedResults`.
+
+Declare `provider-native` for any other scale, whose rows count as unknown-scale, and `none` when results carry no score. The Host refuses an adapter whose `kind` disagrees with its manifest, in either direction.
 
 Use `mountMemorySpaceProvider` from the Source's `/testing` entry to test real child registration, aliased adapter creation and cleanup. It returns frozen descriptor/manifest metadata, `registered`, `createAdapter` and `dispose`. `createMemorySpaceProviderFixture` separately supplies validated connection data and a scoped driver authority. The [published API test](../../../scripts/fixtures/plugin-consumer/tests/public-api.spec.ts) combines both without private imports.
 

@@ -3,7 +3,7 @@ import type { JsonValue } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 import type { MemorySpaceAuthority } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 import type { Insight, MemoryBody as MemorySpace, MemoryListRequest, RememberRequest, SearchRequest } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 import { HttpMemoryProvider, firstArray, jsonNumber, jsonObject, jsonString, type HttpProviderOptions } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
-import { type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
+import { NORMALIZED_RELEVANCE_SCORE, type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 
 function insight(value: unknown): Insight | undefined {
   const item = jsonObject(value)
@@ -36,6 +36,7 @@ function isEndpointMissing(error: unknown): boolean {
 
 export class RetainDbProvider extends HttpMemoryProvider implements MemoryProviderAdapter {
   readonly id = 'retaindb' as const
+  readonly scoreSemantics = NORMALIZED_RELEVANCE_SCORE
 
   constructor(memorySpaces: MemorySpaceAuthority, options: HttpProviderOptions = {}) {
     super(memorySpaces, { label: descriptor.label, ...options })

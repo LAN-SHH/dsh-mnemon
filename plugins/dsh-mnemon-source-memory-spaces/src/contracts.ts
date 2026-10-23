@@ -272,10 +272,7 @@ export const EDGE_TYPES = ['temporal', 'semantic', 'causal', 'entity'] as const 
 export type Intent = 'WHY' | 'WHEN' | 'ENTITY' | 'GENERAL'
 export const INTENTS = ['WHY', 'WHEN', 'ENTITY', 'GENERAL'] as const satisfies readonly Intent[]
 
-/**
- * `high`, `medium` and `low` are bands of a score the Provider calibrates to 0..1. `ranked` rows come from a
- * Provider whose scores are not calibrated and keep its own order; `unknown` rows are unscored or out of range.
- */
+/** `ranked`: a row kept by its Provider's order rather than banded by score (#454). */
 export type RecallRelevanceTier = 'high' | 'medium' | 'low' | 'unknown' | 'ranked'
 
 /**
@@ -482,10 +479,8 @@ export interface RecallQualityStats {
   droppedNonPositiveScore: number
   droppedInvalidScore: number
   unscored: number
-  /** Rows a Provider ranked without calibrated scores. */
+  /** Rows whose scores are not on the bands' scale, including embedding similarity kept by rank. */
   unscaled: number
-  /** Rows whose score fell outside the 0..1 their Provider declared. */
-  outOfRange: number
 }
 
 export interface MemoryListRequest {
@@ -555,8 +550,10 @@ export interface RecallQualityConfig {
   candidateMultiplier?: number
   /** Maximum medium-relevance rows admitted by the strict policy. */
   maxMediumResults?: number
-  /** Maximum unscored or out-of-range rows admitted by the strict policy; ranked rows are not counted. */
+  /** Maximum unknown-scale or unscored rows admitted by the strict policy. */
   maxUnknownResults?: number
+  /** Maximum rows the strict policy keeps in their Provider's order per search: embedding similarity beside other Providers, under the default thresholds. */
+  maxRankedResults?: number
 }
 
 
@@ -567,6 +564,7 @@ export interface ResolvedRecallQualityConfig {
   candidateMultiplier: number
   maxMediumResults: number
   maxUnknownResults: number
+  maxRankedResults: number
 }
 
 

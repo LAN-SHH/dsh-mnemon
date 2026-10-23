@@ -193,7 +193,12 @@ Core 仅约束投影字符数、证据字符数/条数及已分派调用次数�
 
 Provider 使用 Memory Spaces SDK 的 `defineMemorySpaceProvider`。模块只收到限定子节点的 `host.install(ctx, definition)` 能力；私有父 Host、Snapshot 和 Registry 不从 SDK 导出。`installMemorySpaces` 挂载显式子模块，返回 `Promise<void>`，不返回父对象句柄。[external-provider.ts](../../../scripts/fixtures/plugin-consumer/src/external-provider.ts) 会在两个独立父 Source 内以同名子节点测试。
 
-只有当分数是已校准的 0–1 相关度、在任何查询与记忆空间中含义都相同时，才在 Manifest 中声明 `scoreSemantics: 'normalized-relevance'`，并在适配器上使用 `NORMALIZED_RELEVANCE_SCORE`；`recallQuality` 会用固定阈值为这类分数分档。引擎自己的尺度，例如原始 embedding 相似度或 reranker 输出，应声明为 `provider-native`：召回按你给出的顺序保留这些结果，标为 `ranked`，从不与阈值比较。结果没有有意义的分数时使用 `none`。
+分数是 0–1 相关度时，在 Manifest 中声明 `scoreSemantics: 'normalized-relevance'`，并在适配器上使用 `NORMALIZED_RELEVANCE_SCORE`；`recallQuality` 会用阈值为这类分数分档。另有两种只在适配器上声明的细化，用于偏离这一尺度的分数：
+
+- `{ kind: 'normalized-relevance', scale: 'boosted' }`：引擎叠加的加成可能使相关结果超过 1。这样的分数按 1 计。
+- `{ kind: 'normalized-relevance', scale: 'embedding-similarity' }`：分数是服务端 embedding 模型的原始相似度。检索同时覆盖其他 Provider、且两个阈值都是默认值时，`strict-v1` 按你给出的顺序把这些结果排在高相关度结果之后，最多 `maxRankedResults` 条。
+
+其他尺度声明为 `provider-native`，这些结果按未知量纲处理；结果没有分数时声明为 `none`。适配器的 `kind` 与 Manifest 不一致时，无论哪个方向，Host 都会拒绝。
 
 通过 Source 的 `/testing` 入口使用 `mountMemorySpaceProvider`，测试真实子节点注册、带实例别名的驱动创建和清理；返回值只有冻结的 descriptor/manifest 元信息、`registered`、`createAdapter` 与 `dispose`。`createMemorySpaceProviderFixture` 单独提供经过验证的连接及限定范围的驱动权限。[发布 API 测试](../../../scripts/fixtures/plugin-consumer/tests/public-api.spec.ts) 展示如何组合二者，不导入私有实现。
 

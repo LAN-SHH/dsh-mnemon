@@ -11,7 +11,7 @@ import type {
   RememberRequest,
   SearchRequest,
 } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
-import { CATEGORIES, type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
+import { CATEGORIES, type MemoryProviderAdapter, type ProviderBodyStatus as ProviderSpaceStatus, type ProviderMemorySpace, type ProviderScoreSemantics, type ProviderSearchResult } from 'dsh-mnemon-source-memory-spaces/provider-sdk'
 
 interface OpenVikingEnvelope {
   status?: string
@@ -129,6 +129,8 @@ function refused(error: unknown): boolean {
 
 export class OpenVikingProvider implements MemoryProviderAdapter {
   readonly id = 'openviking' as const
+  // Search scores are the raw similarity of the server's embedding model, whose spread varies by model (#454).
+  readonly scoreSemantics: ProviderScoreSemantics = Object.freeze({ kind: 'normalized-relevance', scale: 'embedding-similarity' })
   private readonly requestFetch: typeof fetch
   private readonly requestTimeoutMs: number
 

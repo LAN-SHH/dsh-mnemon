@@ -1,12 +1,8 @@
 ---
+"dsh-mnemon": patch
 "dsh-mnemon-source-memory-spaces": patch
-"dsh-mnemon-strategy-default-three-tier": patch
-"dsh-mnemon-provider-openviking": patch
 "dsh-mnemon-provider-hindsight": patch
-"dsh-mnemon-provider-mem0": patch
-"dsh-mnemon-provider-supermemory": patch
-"dsh-mnemon-provider-retaindb": patch
-"dsh-mnemon-provider-byterover": patch
+"dsh-mnemon-provider-openviking": patch
 ---
 
-Recall no longer drops or demotes a Provider's best answer because its scores use another scale (#454). Only Mnemon Native and Holographic report scores Mnemon calibrates, so only their results are banded high, medium or low. Results from OpenViking, Hindsight, Mem0, Supermemory, RetainDB, ByteRover and Honcho are now `ranked`: they keep their Provider's own order and take their turn by rank among the other spaces' results within the recall limit, and the three-tier strategy admits them like high-relevance rows within its limits. Before, a Hindsight answer scored above 1 counted as unknown and could be left out while unrelated OpenViking rows at 0.66 filled the limit as high relevance. Quality stats now count out-of-range scores separately (`outOfRange`), and `unscaled` counts uncalibrated rows. A third-party Provider that declares `normalized-relevance` is banded as before; declare it only for calibrated 0–1 scores.
+Recall no longer leaves out a Hindsight answer that scores above 1, or lets OpenViking's similarity crowd it out (#454). Hindsight adds reranker and recency boosts to its final score, so a relevant memory can pass 1; such a score now counts as 1 and is banded high instead of unknown. OpenViking passes on its server's embedding similarity, which the default thresholds do not fit: in a search that also covers another Provider, with both thresholds at their defaults, `strict-v1` keeps OpenViking's results in OpenViking's own order after the high-relevance results, at most `recallQuality.maxRankedResults` of them (new, default 2), keyword matches without a score included. Searching OpenViking alone, or setting a threshold away from its default, bands its results as before, and every other Provider's results are unchanged. Provider authors can describe such scores with `scale: 'boosted'` or `scale: 'embedding-similarity'` on the adapter's `scoreSemantics`; the Host now refuses an adapter whose score semantics disagree with its manifest in either direction.

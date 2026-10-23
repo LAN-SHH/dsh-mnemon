@@ -9,10 +9,13 @@ its default.
 Baseline: main `a7e3bc54`. The runs took place on 2026-10-23 (Asia/Shanghai) on macOS arm64 with Node 24.19.0 and pnpm
 10.13.1. All memories are synthetic.
 
-**No RetainDB server was run.** There was no account for the hosted service, and RetainDB Local was read from its
-source, not started. The evidence is RetainDB's contract, from the two sources below, plus request-level checks: unit
-tests of the body the Provider sends, and a probe that writes through the real Memory Spaces Source to a loopback
-recorder.
+**The hosted RetainDB service was not available**: there is no account for it, so it was not tested. RetainDB Local
+0.2.2, RetainDB's open-source server, was run from the provider lab on loopback. The evidence is:
+
+- RetainDB's contract, from the two sources below;
+- request-level checks: unit tests of the body the Provider sends, and a probe that writes through the real Memory
+  Spaces Source to a loopback recorder;
+- a live run against RetainDB Local through the real Source, on main and with the fix.
 
 ## Cause
 
@@ -32,6 +35,7 @@ recorder.
     ([`packages/local/src/cli.ts`](https://github.com/RetainDB/RetainDB/blob/2ad2cc4d6d58145eca1a6cbbce66dfc5b5380f38/packages/local/src/cli.ts#L728)
     at `2ad2cc4d`, lines 728 and 904). Any importance of 1 or more is stored at 0.99. On main, RetainDB Local
     therefore stored every memory at its highest importance, and importance no longer told memories apart in recall.
+    The live run below shows both.
 - How the hosted service treats a value above 1, whether it clamps or refuses it, was not observed.
 
 ## Fix
@@ -69,6 +73,45 @@ memories through `remember` and records the importance in each `POST /v1/memory`
 | Release approvals need a completed canary | 5 | 5 | 0.9 |
 | Release branches are cut from main | none (the Source sends 3) | 3 | 0.7 |
 
+## Against RetainDB Local
+
+[`live.probe.mjs`](./live.probe.mjs) ran against RetainDB Local 0.2.2 from the provider lab: the `retaindb` service in
+[`provider-lab/`](../../../provider-lab/README.md), with hash embeddings, on `http://127.0.0.1:18990`. The container
+had been stopped. It was started for these runs, stopped again afterwards, and its volume was kept.
+
+Each run used a new project of its own and user `rv462`: `rv462-main` with main's driver, `rv462-fix` with the fix.
+Each run then:
+
+1. wrote four memories through the real Memory Spaces Source. They share their wording and length, so RetainDB Local
+   gives all four the same type (`workflow`) and quality (0.275), and only the importance differs;
+2. read back what RetainDB Local stored;
+3. searched `release step check before tagging the version` with the request the Provider sends;
+4. searched the same words through the Source.
+
+| Importance written | main: stored importance | Fix: stored importance |
+|---|---|---|
+| 1 | 0.99 | 0.661 |
+| 3 | 0.99 | 0.861 |
+| 5 | 0.99 | 0.99 |
+| none (the Source sends 3) | 0.99 | 0.861 |
+
+RetainDB Local added 0.161 to each importance it received (quality 0.275 × 0.28, plus the `workflow` weight
+0.7 × 0.12), then capped it at 0.99, so the fix's 0.9 also reached the cap. Its `strength` follows the importance too:
+0.855 for importance 1 and 1 for the others on main, and 0.605, 0.705, 0.805 and 0.705 with the fix.
+
+| RetainDB Local's recall | main: importance written (score) | Fix: importance written (score) |
+|---|---|---|
+| 1st | 3 (11.1374) | 5 (11.0862) |
+| 2nd | 5 (11.1118) | 3 (10.9820) |
+| 3rd | 1 (11.0614) | none (10.8307) |
+| 4th | none (10.9846) | 1 (10.8092) |
+
+On main, every memory carried 0.99, so small differences in relevance set the order, and importance 1 ranked above a
+memory of importance 3. With the fix, the stored importance sets it: 5 first, 3 and none next, 1 last.
+
+Through the Source, the default `strict-v1` recall keeps at most two results whose score lies outside 0 to 1, as
+RetainDB Local's scores do. It returned 3 then 5 on main, and 5 then 3 with the fix.
+
 ## Automated checks
 
 ```text
@@ -77,11 +120,12 @@ pnpm --filter dsh-mnemon-provider-retaindb run typecheck
 pnpm --filter dsh-mnemon-provider-retaindb run build
 pnpm --filter dsh-mnemon-source-memory-spaces exec vitest run  # 296 passed, 2 skipped
 node docs/pr-assets/retaindb-importance-scale/importance.probe.mjs <out.json>
+node docs/pr-assets/retaindb-importance-scale/live.probe.mjs http://127.0.0.1:18990 <new project> <out.json>
 node scripts/verify-docs.mjs
 ```
 
-The main runs used main's `driver.ts`: the new tests ran against it, and the probe ran against the package built from
-it. The new unit tests check:
+The main runs used main's `driver.ts`: the new tests ran against it, and both probes ran against the package built
+from it. The new unit tests check:
 
 - the whole body sent for importance 1 to 5;
 - the 0.7 sent for a request without an importance;
@@ -92,6 +136,7 @@ On main, the test without an importance passes, because main also sent 0.7 then.
 
 ## Limits
 
-- No RetainDB server was run, so what the hosted service stores for 0.5 to 0.9, and what it did with 1 to 5, was not
-  observed. RetainDB Local's behavior above is read from its source.
+- The hosted service was not tested, so what it stores for 0.5 to 0.9, and what it did with 1 to 5, was not observed.
+- The live run used RetainDB Local with the hash embeddings the provider lab configures. Its two projects and eight
+  memories remain in the lab's store; the lab's `dsh-lab` project kept its six memories.
 - No WebUI recording was made. The interface is unchanged, and RetainDB memories show no importance before or after.

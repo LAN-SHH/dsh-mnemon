@@ -7,7 +7,10 @@
     "node": "24.19.0",
     "pnpm": "10.13.1"
   },
-  "server": "none run: there was no account for the hosted RetainDB service, and RetainDB Local was read from its source, not started. The evidence is RetainDB's contract plus request-level checks.",
+  "server": {
+    "hosted": "not available: there is no account for the hosted RetainDB service, so it was not tested",
+    "retainDbLocal": "RetainDB Local 0.2.2 from the provider lab, run live on loopback for this record (see live)"
+  },
   "contract": {
     "hermesAgent": {
       "source": "https://github.com/NousResearch/hermes-agent/blob/419e6627aaeda9c87e0b17bcc013484a2bfdb194/plugins/memory/retaindb/__init__.py",
@@ -134,6 +137,308 @@
           "session_id": "dsh-retaindb-a33e35d302125bbd8e647043",
           "importance": 0.7,
           "write_mode": "sync"
+        }
+      ]
+    }
+  },
+  "live": {
+    "script": "live.probe.mjs",
+    "server": {
+      "container": "dsh-mnemon-provider-lab-retaindb-1 (provider-lab/docker-compose.yml service retaindb)",
+      "image": "dsh-mnemon-provider-lab-retaindb, built 2026-09-26 from the provider lab RetainDB checkout: @retaindb/local 0.2.2",
+      "endpoint": "http://127.0.0.1:18990 (container port 3111)",
+      "environment": "RETAINDB_HOME=/opt/retaindb/data, RETAINDB_EMBEDDING_PROVIDER=hash",
+      "volume": "dsh-mnemon-provider-lab_retaindb-data, kept",
+      "lifecycle": "stopped before (exited 2026-10-14); started 2026-10-23T15:56:06Z, stopped 2026-10-23T15:58:33Z",
+      "storeBefore": {
+        "projects": [
+          "default",
+          "dsh-lab"
+        ],
+        "memories": 6,
+        "sessions": 1
+      },
+      "storeAfter": {
+        "projects": [
+          "default",
+          "dsh-lab",
+          "rv462-main",
+          "rv462-fix"
+        ],
+        "memories": 14,
+        "sessions": 3,
+        "dsh-lab memories": 6
+      }
+    },
+    "path": "MemoryCompositionRunner with the real Memory Spaces Source and the RetainDB Provider; provider-service-update (endpoint, apiKey), body-create (project, userId), four remember calls; then GET /v1/memories, POST /v1/memory/search with the request the Provider sends, and the Source search (default strict-v1 recall)",
+    "query": "release step check before tagging the version",
+    "writes": [
+      {
+        "content": "Release step one: check the changelog before tagging the version",
+        "importance": 1
+      },
+      {
+        "content": "Release step two: check the licenses before tagging the version",
+        "importance": 3
+      },
+      {
+        "content": "Release step three: check the canary before tagging the version",
+        "importance": 5
+      },
+      {
+        "content": "Release step four: check the translations before tagging the version",
+        "importance": "none (the Source sends 3)"
+      }
+    ],
+    "storedImportance": {
+      "rule": "RetainDB Local stores clamp(received + quality * 0.28 + typeWeight * 0.12, 0.1, 0.99); here quality 0.275 and type workflow (weight 0.7), so received + 0.161, capped at 0.99",
+      "main": {
+        "1": 0.99,
+        "3": 0.99,
+        "5": 0.99,
+        "none": 0.99
+      },
+      "fix": {
+        "1": 0.661,
+        "3": 0.861,
+        "5": 0.99,
+        "none": 0.861
+      }
+    },
+    "recallOrder": {
+      "main": [
+        "3",
+        "5",
+        "1",
+        "none"
+      ],
+      "fix": [
+        "5",
+        "3",
+        "none",
+        "1"
+      ],
+      "throughSourceMain": [
+        "3",
+        "5"
+      ],
+      "throughSourceFix": [
+        "5",
+        "3"
+      ],
+      "throughSourceNote": "strict-v1 keeps at most two results whose score lies outside 0..1 (maxUnknownResults 2); RetainDB Local scores are about 11"
+    },
+    "main": {
+      "project": "rv462-main",
+      "userId": "rv462",
+      "spaceId": "retaindb-0cd37920-df17-40f4-9aba-ff70163b7d56",
+      "stored": [
+        {
+          "content": "Release step one: check the changelog before tagging the version",
+          "importanceWritten": 1,
+          "id": "mem_fd8bd76c-a302-49a4-b1fe-524e5eca71d5",
+          "type": "workflow",
+          "importance": 0.99,
+          "confidence": 0.8640000000000001,
+          "strength": 0.855,
+          "quality": 0.275
+        },
+        {
+          "content": "Release step two: check the licenses before tagging the version",
+          "importanceWritten": 3,
+          "id": "mem_53ca727e-df40-463d-b50b-9fdc82e103e6",
+          "type": "workflow",
+          "importance": 0.99,
+          "confidence": 0.8640000000000001,
+          "strength": 1,
+          "quality": 0.275
+        },
+        {
+          "content": "Release step three: check the canary before tagging the version",
+          "importanceWritten": 5,
+          "id": "mem_a3d8a6cf-3a1d-460a-b489-b8dfb7ea4b67",
+          "type": "workflow",
+          "importance": 0.99,
+          "confidence": 0.8640000000000001,
+          "strength": 1,
+          "quality": 0.275
+        },
+        {
+          "content": "Release step four: check the translations before tagging the version",
+          "importanceWritten": null,
+          "id": "mem_70d3fcab-7cd2-40e7-85e6-a9ea69f771e1",
+          "type": "workflow",
+          "importance": 0.99,
+          "confidence": 0.8640000000000001,
+          "strength": 1,
+          "quality": 0.275
+        }
+      ],
+      "recall": [
+        {
+          "importanceWritten": "3",
+          "score": 11.1374,
+          "importance": 0.99,
+          "scores": {
+            "bm25": 1.1397,
+            "vector": 0.8731,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        },
+        {
+          "importanceWritten": "5",
+          "score": 11.1118,
+          "importance": 0.99,
+          "scores": {
+            "bm25": 1.1397,
+            "vector": 0.8746,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        },
+        {
+          "importanceWritten": "1",
+          "score": 11.0614,
+          "importance": 0.99,
+          "scores": {
+            "bm25": 1.1339,
+            "vector": 0.868,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        },
+        {
+          "importanceWritten": "none",
+          "score": 10.9846,
+          "importance": 0.99,
+          "scores": {
+            "bm25": 1.1397,
+            "vector": 0.8482,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        }
+      ],
+      "throughSource": [
+        {
+          "importanceWritten": "3",
+          "score": 11.476
+        },
+        {
+          "importanceWritten": "5",
+          "score": 11.4504
+        }
+      ]
+    },
+    "fix": {
+      "project": "rv462-fix",
+      "userId": "rv462",
+      "spaceId": "retaindb-60e46370-2248-481f-ad9c-49ca54740f91",
+      "stored": [
+        {
+          "content": "Release step one: check the changelog before tagging the version",
+          "importanceWritten": 1,
+          "id": "mem_10ce511b-ddd8-4365-8121-80819b6c4336",
+          "type": "workflow",
+          "importance": 0.6609999999999999,
+          "confidence": 0.8640000000000001,
+          "strength": 0.605,
+          "quality": 0.275
+        },
+        {
+          "content": "Release step two: check the licenses before tagging the version",
+          "importanceWritten": 3,
+          "id": "mem_07b69789-7ee9-4c03-953c-1fbcd8b289a5",
+          "type": "workflow",
+          "importance": 0.8609999999999999,
+          "confidence": 0.8640000000000001,
+          "strength": 0.705,
+          "quality": 0.275
+        },
+        {
+          "content": "Release step three: check the canary before tagging the version",
+          "importanceWritten": 5,
+          "id": "mem_d43e9d5e-8e52-4a84-91d1-ac6346a9df8d",
+          "type": "workflow",
+          "importance": 0.99,
+          "confidence": 0.8640000000000001,
+          "strength": 0.805,
+          "quality": 0.275
+        },
+        {
+          "content": "Release step four: check the translations before tagging the version",
+          "importanceWritten": null,
+          "id": "mem_7927a671-ba33-4d7a-b9dd-217d1e08c4fe",
+          "type": "workflow",
+          "importance": 0.8609999999999999,
+          "confidence": 0.8640000000000001,
+          "strength": 0.705,
+          "quality": 0.275
+        }
+      ],
+      "recall": [
+        {
+          "importanceWritten": "5",
+          "score": 11.0862,
+          "importance": 0.99,
+          "scores": {
+            "bm25": 1.1383,
+            "vector": 0.8746,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        },
+        {
+          "importanceWritten": "3",
+          "score": 10.982,
+          "importance": 0.8609999999999999,
+          "scores": {
+            "bm25": 1.1383,
+            "vector": 0.8731,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        },
+        {
+          "importanceWritten": "none",
+          "score": 10.8307,
+          "importance": 0.8609999999999999,
+          "scores": {
+            "bm25": 1.1383,
+            "vector": 0.8482,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        },
+        {
+          "importanceWritten": "1",
+          "score": 10.8092,
+          "importance": 0.6609999999999999,
+          "scores": {
+            "bm25": 1.1383,
+            "vector": 0.868,
+            "graph": 26,
+            "type_intent": 0,
+            "quality": 0.275
+          }
+        }
+      ],
+      "throughSource": [
+        {
+          "importanceWritten": "5",
+          "score": 11.4248
+        },
+        {
+          "importanceWritten": "3",
+          "score": 11.3206
         }
       ]
     }
